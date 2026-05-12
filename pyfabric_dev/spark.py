@@ -187,10 +187,13 @@ def _create_local_spark_session() -> SparkSession:
         .config("spark.databricks.delta.retentionDurationCheck.enabled", "false")
         .enableHiveSupport()
 
-        # Memory configuration for local development
-        .config("spark.driver.memory", "8g")
-        .config("spark.driver.maxResultSize", "4g")
-        .config("spark.executor.memory", "8g")
+        # Memory configuration for local development. Tunable via env vars
+        # so resource-constrained environments (GitHub-hosted runners,
+        # laptops with <16GB RAM) can dial the JVM heap down without
+        # editing the package. Defaults match a developer workstation.
+        .config("spark.driver.memory", os.getenv("FABRIC_DEV_DRIVER_MEMORY", "8g"))
+        .config("spark.driver.maxResultSize", os.getenv("FABRIC_DEV_DRIVER_MAX_RESULT_SIZE", "4g"))
+        .config("spark.executor.memory", os.getenv("FABRIC_DEV_EXECUTOR_MEMORY", "8g"))
         .config("spark.memory.fraction", "0.8")
         .config("spark.memory.storageFraction", "0.3")
 

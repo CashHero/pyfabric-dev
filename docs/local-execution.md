@@ -92,5 +92,8 @@ without editing the package:
 | `SPARK_MASTER` | `local[*]` | Spark master URL |
 | `FABRIC_WORKSPACE_ID` | `local-dev-workspace-id` | Workspace ID returned by mocked context |
 | `KEY_VAULT_URL` | (unset) | If set, mock notebookutils delegates secret reads to Azure |
+| `FABRIC_DEV_DRIVER_MEMORY` | `8g` | `spark.driver.memory` for the local Spark session |
+| `FABRIC_DEV_DRIVER_MAX_RESULT_SIZE` | `4g` | `spark.driver.maxResultSize` |
+| `FABRIC_DEV_EXECUTOR_MEMORY` | `8g` | `spark.executor.memory` |
 
 Drop a `.env` file at the project root; `python-dotenv` loads it on import.

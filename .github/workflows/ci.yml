@@ -78,4 +78,12 @@ jobs:
 
       - name: Run example's tests
         working-directory: examples/minimal-medallion
-        run: pyfabric-test --project-root . --config config/test_batches.json
+        env:
+          # GitHub-hosted runners have ~7GB total memory; the framework's
+          # default 8GB-per-JVM Spark settings would OOM-kill a second
+          # parallel worker. Dial both down and serialize the workers so
+          # consecutive Spark sessions don't fight for the JVM heap.
+          FABRIC_DEV_DRIVER_MEMORY: 2g
+          FABRIC_DEV_DRIVER_MAX_RESULT_SIZE: 1g
+          FABRIC_DEV_EXECUTOR_MEMORY: 2g
+        run: pyfabric-test --project-root . --config config/test_batches.json --max-workers 1
