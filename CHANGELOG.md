@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-05-12
+
+### Added
+- `pyfabric_dev.runners` subpackage with `NotebookRunner`, `PipelineRunner`,
+  `FabricIdResolver`, and `RunnerHooks`. Consumers register hooks to inject
+  project-specific globals (`initial_globals`), override Fabric-bound
+  helpers after `%run common_functions` executes
+  (`common_functions_overrides`), or supply per-notebook symbols
+  (`notebook_globals`) — keeping the runners themselves agnostic of any
+  particular project's code.
+- CLI entry points `pyfabric-run-notebook` and `pyfabric-run-pipeline`,
+  bringing the total to four console scripts.
+- Test-batch JSON config (loaded via `--config`) so `pyfabric-test` can
+  mirror an arbitrary project's Fabric test pipeline structure without
+  hardcoding stage/group names. Auto-discovers `tests/test_*.py` as a
+  single stage when no config is supplied.
+
+### Changed
+- `pyfabric-test` no longer hardcodes CashHero stage groupings.
+- Worker tmpdir now lives under `DEV_BASE_DIR / _parallel_workers`
+  instead of a hardcoded `~/.cashhero_fabric_dev/...` path.
+
 ## [0.1.0-alpha] - 2026-05-12
 
 Initial extraction from the
