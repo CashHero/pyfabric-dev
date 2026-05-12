@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-12
+
+### Added
+- `examples/minimal-medallion/` — a working bronze/silver/gold project
+  over toy sales data, exercising all four CLIs end-to-end. Generates,
+  tests, and runs locally.
+- `docs/` — getting-started, source-of-truth pattern, local execution,
+  testing, hooks reference.
+- GitHub Actions CI matrix (`.github/workflows/ci.yml`) running pytest
+  and the example's full generate+test cycle on Python 3.13 and 3.14.
+
+### Changed
+- **BREAKING**: minimum Python is now **3.13** (was 3.10). Python 3.13
+  and 3.14 are the supported matrix going forward.
+- `pyfabric-generate` now accepts `--project-root` and threads it
+  through every path computation. Previously it resolved paths relative
+  to the install location, which only worked for cashhero-fabric's
+  forked copy.
+- `pyfabric-generate` no longer writes empty stub notebooks for
+  CashHero-specific modules (`quickbooks_auth`, `quickbooks_client`)
+  when the consumer doesn't ship those sources. The corresponding
+  generators are gated on file existence.
+
+### Migration from 0.1.0
+- Bump your Python interpreter to 3.13 or 3.14.
+- If you were invoking `pyfabric-generate` from the package's install
+  directory and relying on the implicit project-root, add an explicit
+  `--project-root .` from your project root.
+
 ## [0.1.0] - 2026-05-12
 
 ### Added

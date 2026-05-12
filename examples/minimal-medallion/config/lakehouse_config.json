@@ -1,0 +1,40 @@
+{
+  "bronze": {
+    "default_lakehouse": "00000000-0000-0000-0000-000000000001",
+    "default_lakehouse_name": "bronze_lakehouse",
+    "default_lakehouse_workspace_id": "00000000-0000-0000-0000-00000000aaaa",
+    "known_lakehouses": [
+      {"id": "00000000-0000-0000-0000-000000000001"}
+    ]
+  },
+  "silver": {
+    "default_lakehouse": "00000000-0000-0000-0000-000000000002",
+    "default_lakehouse_name": "silver_lakehouse",
+    "default_lakehouse_workspace_id": "00000000-0000-0000-0000-00000000aaaa",
+    "known_lakehouses": [
+      {"id": "00000000-0000-0000-0000-000000000001"},
+      {"id": "00000000-0000-0000-0000-000000000002"}
+    ]
+  },
+  "gold": {
+    "default_lakehouse": "00000000-0000-0000-0000-000000000003",
+    "default_lakehouse_name": "gold_lakehouse",
+    "default_lakehouse_workspace_id": "00000000-0000-0000-0000-00000000aaaa",
+    "known_lakehouses": [
+      {"id": "00000000-0000-0000-0000-000000000002"},
+      {"id": "00000000-0000-0000-0000-000000000003"}
+    ]
+  },
+  "common": {
+    "default_lakehouse": "00000000-0000-0000-0000-000000000001",
+    "default_lakehouse_name": "bronze_lakehouse",
+    "default_lakehouse_workspace_id": "00000000-0000-0000-0000-00000000aaaa",
+    "known_lakehouses": []
+  },
+  "tests": {
+    "default_lakehouse": "00000000-0000-0000-0000-000000000001",
+    "default_lakehouse_name": "bronze_lakehouse",
+    "default_lakehouse_workspace_id": "00000000-0000-0000-0000-00000000aaaa",
+    "known_lakehouses": []
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "notebook_runner_scripts": [],
+  "groups": {
+    "silver": {
+      "stage": 1,
+      "files": ["tests/test_silver_transform_sales.py"]
+    },
+    "gold": {
+      "stage": 1,
+      "files": ["tests/test_gold_build_daily_summary.py"]
+    }
+  },
+  "stage_order": ["silver", "gold"],
+  "stage_aliases": {
+    "silver": ["silver"],
+    "gold": ["gold"]
+  }
+}
