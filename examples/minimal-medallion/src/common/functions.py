@@ -10,7 +10,6 @@ them directly from this module via the ``src.common.functions`` namespace.
 """
 import logging
 import os
-from logging import Logger
 from pathlib import Path
 
 from pyspark.sql import SparkSession
@@ -30,7 +29,7 @@ def cf_get_lakehouse_path(path: str) -> str:
     return str(base / path.lstrip("/"))
 
 
-def cf_create_logger(name: str) -> Logger:
+def cf_create_logger(name: str) -> logging.Logger:
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO,
