@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyfabric-dev"
+version = "0.1.0a0"
+description = "Local development framework for Microsoft Fabric notebooks: source-of-truth Python, generated .Notebook artifacts, mocked Fabric APIs, parallel local testing."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+authors = [
+  { name = "CashHero", email = "engineering@cashhero.ai" },
+]
+keywords = ["microsoft-fabric", "pyspark", "delta-lake", "notebook", "medallion", "lakehouse"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+  "pyspark>=3.5.0",
+  "delta-spark>=3.2.0",
+  "azure-identity>=1.15.0",
+  "azure-keyvault-secrets>=4.7.0",
+  "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0.0",
+  "pytest-cov>=4.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/CashHero/pyfabric-dev"
+Repository = "https://github.com/CashHero/pyfabric-dev"
+Issues = "https://github.com/CashHero/pyfabric-dev/issues"
+Changelog = "https://github.com/CashHero/pyfabric-dev/blob/main/CHANGELOG.md"
+
+[project.scripts]
+pyfabric-generate = "pyfabric_dev.cli.generate_notebooks:main"
+pyfabric-test = "pyfabric_dev.cli.run_tests_parallel:main"
+
+[tool.setuptools.packages.find]
+include = ["pyfabric_dev*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
