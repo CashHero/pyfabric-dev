@@ -1,23 +1,38 @@
 #!/usr/bin/env python3
-"""
-Run pytest test files in parallel, mirroring the Fabric test pipeline structure.
+"""Run pytest test files in parallel, mirroring a Fabric test pipeline.
 
-Each worker subprocess gets an isolated Spark metastore (via DEV_BASE_DIR) so
-that multiple Spark sessions can run concurrently without Derby lock conflicts.
+Each worker subprocess gets an isolated Spark metastore (via the
+``DEV_BASE_DIR`` env var) so that multiple Spark sessions can run
+concurrently without Derby lock conflicts.
 
-Usage:
-    python dev/run_tests_parallel.py                  # Run all tests
-    python dev/run_tests_parallel.py --max-workers 4  # Limit concurrency
-    python dev/run_tests_parallel.py --dry-run         # Show execution plan
-    python dev/run_tests_parallel.py --stage bronze    # Run only bronze tests
-    python dev/run_tests_parallel.py -- -m "not slow"  # Forward pytest args
+Batches are loaded from a JSON config file so the runner has no
+hardcoded knowledge of any specific project's test files:
 
-Note: pytest args (e.g. -m, -k) only apply to pytest-based test files.
-Notebook runner scripts (listed in NOTEBOOK_RUNNER_SCRIPTS) are always run
-as-is with `python <file>` and are not affected by forwarded pytest args.
+    pyfabric-test --config config/test_batches.json
+
+If ``--config`` is omitted the runner looks for
+``config/test_batches.json`` next to the CWD; absent that, it
+auto-discovers every ``tests/test_*.py`` and runs them as a single
+stage.
+
+Config schema:
+
+    {
+      "notebook_runner_scripts": ["tests/test_foo.py", ...],
+      "groups": {
+        "common":        {"stage": 1, "files": [...]},
+        "bronze_batch1": {"stage": 1, "files": [...]},
+        "bronze_batch2": {"stage": 2, "files": [...]}
+      },
+      "stage_order": ["common", "bronze_batch1", "bronze_batch2", ...],
+      "stage_aliases": {
+        "bronze": ["bronze_batch1", "bronze_batch2"]
+      }
+    }
 """
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -25,116 +40,52 @@ import sys
 import time
 from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
-# ── Batch structure mirrors Fabric test pipelines ─────────────────────────────
-#
-# test_etl runs common, bronze, silver, gold, and customizations in parallel.
-# Within bronze and gold there are two sequential batches.
-#
-# Stage 1: everything with no intra-layer dependencies
-# Stage 2: bronze batch 2 and gold batch 2 (depend on their batch 1)
 
-# Notebook runner scripts that should be run with `python <file>` instead of pytest.
-# These files have no pytest tests — they execute Fabric test notebooks via NotebookRunner.
-NOTEBOOK_RUNNER_SCRIPTS = {
-    "tests/test_common_defs.py",
-    "tests/test_common_functions.py",
-    "tests/test_customizations_processor.py",
-}
+DEFAULT_TIMEOUT = 600
 
-COMMON = [
-    "tests/test_common_defs.py",
-    "tests/test_common_functions.py",
-    "tests/test_common_env.py",
-    "tests/test_cf_format_rows_as_table.py",
-]
 
-BRONZE_BATCH1 = [
-    "tests/test_bronze_extract_from_gl.py",
-    "tests/test_bronze_ingest_from_priority.py",
-    "tests/test_bronze_ingest_from_quickbooks.py",
-    "tests/test_bronze_load_companies_config.py",
-    "tests/test_bronze_update_watermark_table.py",
-    "tests/test_bronze_post_process_priority_extract.py",
-    "tests/test_bronze_preprocess_onprem_watermarks.py",
-    "tests/test_bronze_load_budgets.py",
-    "tests/test_bronze_load_salaries.py",
-]
+# ----------------------------------------------------------------------
+# Config loading
+# ----------------------------------------------------------------------
 
-BRONZE_BATCH2 = [
-    "tests/test_bronze_validate_bronze.py",
-]
+def _auto_discover_config(project_root: Path) -> dict:
+    """Build a default single-stage config from tests/test_*.py."""
+    tests_dir = project_root / "tests"
+    files = (
+        sorted(str(p.relative_to(project_root)) for p in tests_dir.glob("test_*.py"))
+        if tests_dir.exists()
+        else []
+    )
+    return {
+        "notebook_runner_scripts": [],
+        "groups": {"all": {"stage": 1, "files": files}},
+        "stage_order": ["all"],
+        "stage_aliases": {"all": ["all"]},
+    }
 
-SILVER = [
-    "tests/test_silver_transform_accounts.py",
-    "tests/test_silver_transform_companies_config.py",
-    "tests/test_silver_transform_currency_rates.py",
-    "tests/test_silver_transform_general_ledger.py",
-    "tests/test_silver_transform_budgets.py",
-    "tests/test_silver_transform_salaries.py",
-]
 
-GOLD_BATCH1 = [
-    "tests/test_gold_configure_companies.py",
-    "tests/test_gold_finalize_accounts.py",
-    "tests/test_gold_unify_accounts.py",
-    "tests/test_gold_build_accounts_balances.py",
-    "tests/test_gold_build_dim_dates.py",
-    "tests/test_gold_build_budgets.py",
-    "tests/test_gold_build_salaries.py",
-]
+def _load_config(config_path: Optional[Path], project_root: Path) -> dict:
+    if config_path is not None:
+        if not config_path.exists():
+            print(f"❌ Config file not found: {config_path}")
+            sys.exit(1)
+        cfg = json.loads(config_path.read_text())
+    else:
+        default_path = project_root / "config" / "test_batches.json"
+        cfg = json.loads(default_path.read_text()) if default_path.exists() else _auto_discover_config(project_root)
 
-GOLD_BATCH2 = [
-    "tests/test_gold_build_fact_tables.py",
-    "tests/test_gold_build_full_ledger.py",
-    "tests/test_gold_export_to_sql.py",
-    "tests/test_gold_onboard_org.py",
-    "tests/test_gold_offboard_org.py",
-]
+    cfg.setdefault("notebook_runner_scripts", [])
+    cfg.setdefault("groups", {})
+    cfg.setdefault("stage_order", list(cfg["groups"].keys()))
+    cfg.setdefault("stage_aliases", {name: [name] for name in cfg["groups"]})
+    return cfg
 
-CUSTOMIZATIONS = [
-    "tests/test_customizations_processor.py",
-]
 
-OTHER = [
-    "tests/test_extract_imports.py",
-    "tests/test_generate_notebooks.py",
-    "tests/test_run_pipeline.py",
-]
-
-# Ordered list ensures deterministic execution and dry-run output.
-STAGE_ORDER = [
-    "common",
-    "bronze_batch1",
-    "bronze_batch2",
-    "silver",
-    "gold_batch1",
-    "gold_batch2",
-    "customizations",
-    "other",
-]
-
-STAGES = {
-    "common": {"stage": 1, "files": COMMON},
-    "bronze_batch1": {"stage": 1, "files": BRONZE_BATCH1},
-    "bronze_batch2": {"stage": 2, "files": BRONZE_BATCH2},
-    "silver": {"stage": 1, "files": SILVER},
-    "gold_batch1": {"stage": 1, "files": GOLD_BATCH1},
-    "gold_batch2": {"stage": 2, "files": GOLD_BATCH2},
-    "customizations": {"stage": 1, "files": CUSTOMIZATIONS},
-    "other": {"stage": 1, "files": OTHER},
-}
-
-# Friendly names for --stage filter
-STAGE_ALIASES = {
-    "common": ["common"],
-    "bronze": ["bronze_batch1", "bronze_batch2"],
-    "silver": ["silver"],
-    "gold": ["gold_batch1", "gold_batch2"],
-    "customizations": ["customizations"],
-    "other": ["other"],
-}
-
+# ----------------------------------------------------------------------
+# Color helpers
+# ----------------------------------------------------------------------
 
 def _color(text: str, code: int) -> str:
     if not sys.stdout.isatty():
@@ -142,161 +93,125 @@ def _color(text: str, code: int) -> str:
     return f"\033[{code}m{text}\033[0m"
 
 
-def _green(text: str) -> str:
-    return _color(text, 32)
+def _green(text: str) -> str: return _color(text, 32)
+def _red(text: str) -> str: return _color(text, 31)
+def _yellow(text: str) -> str: return _color(text, 33)
+def _bold(text: str) -> str: return _color(text, 1)
 
 
-def _red(text: str) -> str:
-    return _color(text, 31)
-
-
-def _yellow(text: str) -> str:
-    return _color(text, 33)
-
-
-def _bold(text: str) -> str:
-    return _color(text, 1)
-
-
-def _is_notebook_runner(test_file: str) -> bool:
-    """Check if a test file is a notebook runner script (no pytest tests)."""
-    return test_file in NOTEBOOK_RUNNER_SCRIPTS
-
-
-# Default per-file timeout in seconds (10 minutes).
-DEFAULT_TIMEOUT = 600
-
+# ----------------------------------------------------------------------
+# Worker
+# ----------------------------------------------------------------------
 
 def _run_test_file(
     test_file: str,
     worker_id: int,
     tmp_base: str,
-    pytest_args: list[str],
+    pytest_args: List[str],
+    notebook_runner_scripts: List[str],
     timeout: int = DEFAULT_TIMEOUT,
-) -> tuple[str, int, str, float]:
-    """Run a single test file in an isolated Spark environment.
-
-    Notebook runner scripts (no pytest tests) are run directly with python.
-    Regular test files are run via pytest.
-
-    Returns (test_file, returncode, output, duration_seconds).
-    """
+) -> Tuple[str, int, str, float]:
+    """Run a single test file. Notebook-runner scripts use ``python``; the
+    rest use ``pytest``."""
     worker_dir = os.path.join(tmp_base, f"worker_{worker_id}")
-
     env = os.environ.copy()
     env["DEV_BASE_DIR"] = worker_dir
     os.makedirs(worker_dir, exist_ok=True)
 
-    is_script = _is_notebook_runner(test_file)
+    is_script = test_file in set(notebook_runner_scripts)
 
     start = time.monotonic()
     try:
         if is_script:
             result = subprocess.run(
                 [sys.executable, test_file],
-                capture_output=True,
-                text=True,
-                env=env,
-                timeout=timeout,
+                capture_output=True, text=True, env=env, timeout=timeout,
             )
         else:
             result = subprocess.run(
-                [sys.executable, "-m", "pytest", test_file, "-v", "--tb=short",
-                 "--no-header"] + pytest_args,
-                capture_output=True,
-                text=True,
-                env=env,
-                timeout=timeout,
+                [sys.executable, "-m", "pytest", test_file, "-v", "--tb=short", "--no-header"]
+                + pytest_args,
+                capture_output=True, text=True, env=env, timeout=timeout,
             )
     except subprocess.TimeoutExpired:
-        duration = time.monotonic() - start
-        return test_file, 1, f"TIMED OUT after {timeout}s", duration
-    duration = time.monotonic() - start
-    output = result.stdout
-    if result.stderr:
-        output += "\n" + result.stderr
+        return test_file, 1, f"TIMED OUT after {timeout}s", time.monotonic() - start
 
+    duration = time.monotonic() - start
+    output = result.stdout + (("\n" + result.stderr) if result.stderr else "")
     return test_file, result.returncode, output, duration
 
 
-def _collect_files(stage_filter: str | None) -> tuple[list[str], list[str]]:
-    """Return (stage1_files, stage2_files) based on optional filter."""
+# ----------------------------------------------------------------------
+# Collection / filtering
+# ----------------------------------------------------------------------
+
+def _collect_files(cfg: dict, stage_filter: Optional[str]) -> Tuple[List[str], List[str]]:
+    """Return (stage1_files, stage2_files) based on optional stage alias filter."""
+    groups = cfg["groups"]
+    stage_order = cfg["stage_order"]
+    aliases = cfg["stage_aliases"]
+
     if stage_filter:
-        groups = STAGE_ALIASES.get(stage_filter)
-        if not groups:
+        names = aliases.get(stage_filter)
+        if not names:
             print(f"Unknown stage: {stage_filter}")
-            print(f"Available: {', '.join(STAGE_ALIASES)}")
+            print(f"Available: {', '.join(aliases)}")
             sys.exit(1)
-        stage1 = []
-        stage2 = []
-        for g in groups:
-            info = STAGES[g]
-            if info["stage"] == 1:
-                stage1.extend(info["files"])
-            else:
-                stage2.extend(info["files"])
+        stage1, stage2 = [], []
+        for name in names:
+            info = groups[name]
+            (stage1 if info["stage"] == 1 else stage2).extend(info["files"])
         return stage1, stage2
 
-    stage1 = []
-    stage2 = []
-    for key in STAGE_ORDER:
-        info = STAGES[key]
-        if info["stage"] == 1:
-            stage1.extend(info["files"])
-        else:
-            stage2.extend(info["files"])
+    stage1, stage2 = [], []
+    for name in stage_order:
+        info = groups[name]
+        (stage1 if info["stage"] == 1 else stage2).extend(info["files"])
     return stage1, stage2
 
 
-def _filter_existing(files: list[str], strict: bool = False) -> list[str]:
-    """Filter out test files that don't exist on disk.
-
-    In strict mode, exit with an error if any files are missing.
-    """
-    existing = []
-    missing = []
+def _filter_existing(files: List[str], strict: bool) -> List[str]:
+    existing, missing = [], []
     for f in files:
-        if Path(f).exists():
-            existing.append(f)
-        else:
-            missing.append(f)
+        (existing if Path(f).exists() else missing).append(f)
     if missing:
         if strict:
             for f in missing:
                 print(f"  {_red('missing')} {f}")
             print(f"\n{_red('Aborting')}: {len(missing)} test file(s) not found (--strict)")
             sys.exit(1)
-        else:
-            for f in missing:
-                print(f"  {_yellow('skip')} {f} (not found)")
+        for f in missing:
+            print(f"  {_yellow('skip')} {f} (not found)")
     return existing
 
 
 def _run_stage(
     label: str,
-    files: list[str],
+    files: List[str],
     max_workers: int,
-    pytest_args: list[str],
+    pytest_args: List[str],
     tmp_base: str,
-    worker_counter: list[int],
+    worker_counter: List[int],
+    notebook_runner_scripts: List[str],
     timeout: int = DEFAULT_TIMEOUT,
-) -> tuple[list[str], list[str]]:
-    """Run a list of test files in parallel. Returns (passed, failed) file lists."""
+) -> Tuple[List[str], List[str]]:
     if not files:
         return [], []
 
     print(f"\n{_bold(label)} ({len(files)} files, up to {max_workers} workers)")
     print("─" * 60)
 
-    passed = []
-    failed = []
-    futures: dict[Future, str] = {}
+    passed, failed = [], []
+    futures: Dict[Future, str] = {}
 
     with ProcessPoolExecutor(max_workers=max_workers) as pool:
         for f in files:
             wid = worker_counter[0]
             worker_counter[0] += 1
-            fut = pool.submit(_run_test_file, f, wid, tmp_base, pytest_args, timeout)
+            fut = pool.submit(
+                _run_test_file, f, wid, tmp_base, pytest_args,
+                notebook_runner_scripts, timeout,
+            )
             futures[fut] = f
 
         for fut in as_completed(futures):
@@ -319,7 +234,6 @@ def _run_stage(
             else:
                 failed.append(test_file)
                 print(f"  {_red('FAILED')}  {short_name}  ({duration_str})")
-                # Show failure details indented
                 detail_lines = [
                     line for line in output.strip().splitlines()
                     if "FAILED" in line or "ERROR" in line or "assert" in line.lower()
@@ -328,7 +242,6 @@ def _run_stage(
                     for line in detail_lines:
                         print(f"          {line}")
                 else:
-                    # No recognizable failure lines — show full output
                     for line in output.strip().splitlines():
                         print(f"          {line}")
 
@@ -336,9 +249,6 @@ def _run_stage(
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Run pytest tests in parallel, mirroring the Fabric test pipeline."
-    )
     def _positive_int(value: str) -> int:
         try:
             n = int(value)
@@ -348,48 +258,36 @@ def main():
             raise argparse.ArgumentTypeError(f"must be >= 1, got {n}")
         return n
 
-    parser.add_argument(
-        "--max-workers",
-        type=_positive_int,
-        default=min(os.cpu_count() or 4, 6),
-        help="Max parallel workers (default: min(cpu_count, 6))",
+    parser = argparse.ArgumentParser(
+        description="Run pytest test files in parallel using a JSON batch config."
     )
-    parser.add_argument(
-        "--stage",
-        choices=list(STAGE_ALIASES),
-        help="Run only a specific layer",
-    )
-    parser.add_argument(
-        "--timeout",
-        type=_positive_int,
-        default=DEFAULT_TIMEOUT,
-        help=f"Per-file timeout in seconds (default: {DEFAULT_TIMEOUT})",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show execution plan without running",
-    )
-    parser.add_argument(
-        "--strict",
-        action="store_true",
-        help="Fail if any expected test files are missing on disk",
-    )
-    parser.add_argument(
-        "pytest_args",
-        nargs=argparse.REMAINDER,
-        help="Extra args forwarded to pytest (e.g. -- -m 'not slow')",
-    )
+    parser.add_argument("--config", type=Path, help="Path to test-batch config JSON")
+    parser.add_argument("--project-root", type=Path, default=Path.cwd(),
+                        help="Project root (default: CWD)")
+    parser.add_argument("--max-workers", type=_positive_int,
+                        default=min(os.cpu_count() or 4, 6),
+                        help="Max parallel workers (default: min(cpu_count, 6))")
+    parser.add_argument("--stage", help="Run only the named stage alias")
+    parser.add_argument("--timeout", type=_positive_int, default=DEFAULT_TIMEOUT,
+                        help=f"Per-file timeout in seconds (default: {DEFAULT_TIMEOUT})")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Show execution plan without running")
+    parser.add_argument("--strict", action="store_true",
+                        help="Fail if any expected test files are missing on disk")
+    parser.add_argument("pytest_args", nargs=argparse.REMAINDER,
+                        help="Extra args forwarded to pytest (e.g. -- -m 'not slow')")
 
     args = parser.parse_args()
-    # Strip a single leading "--" separator that REMAINDER may include
     pytest_args = args.pytest_args or []
     if pytest_args and pytest_args[0] == "--":
         pytest_args = pytest_args[1:]
-    args.pytest_args = pytest_args
-    stage1_files, stage2_files = _collect_files(args.stage)
-    stage1_files = _filter_existing(stage1_files, strict=args.strict)
-    stage2_files = _filter_existing(stage2_files, strict=args.strict)
+
+    cfg = _load_config(args.config, args.project_root)
+    notebook_runner_scripts = cfg["notebook_runner_scripts"]
+
+    stage1_files, stage2_files = _collect_files(cfg, args.stage)
+    stage1_files = _filter_existing(stage1_files, args.strict)
+    stage2_files = _filter_existing(stage2_files, args.strict)
 
     if args.dry_run:
         print(_bold("Stage 1 (parallel):"))
@@ -403,38 +301,28 @@ def main():
               f"max {args.max_workers} workers")
         return
 
+    # Worker tmpdir lives under DEV_BASE_DIR so it follows whatever the
+    # consumer configured (e.g. ~/.cashhero_fabric_dev/<hash>/...).
+    from pyfabric_dev.local_config import DEV_BASE_DIR
+    tmp_base = str(DEV_BASE_DIR / "_parallel_workers")
+
     start_time = time.monotonic()
-    base_dir_name = os.getenv("FABRIC_DEV_BASE_DIR_NAME", ".fabric_dev")
-    tmp_base = str(Path.home() / base_dir_name / "_parallel_workers")
-    worker_counter = [0]  # mutable counter shared across stages
-    all_passed = []
-    all_failed = []
+    worker_counter = [0]
+    all_passed, all_failed = [], []
 
     try:
         passed, failed = _run_stage(
-            "Stage 1: common + bronze/1 + silver + gold/1 + customizations + other",
-            stage1_files,
-            args.max_workers,
-            args.pytest_args,
-            tmp_base,
-            worker_counter,
-            args.timeout,
+            "Stage 1", stage1_files, args.max_workers, pytest_args,
+            tmp_base, worker_counter, notebook_runner_scripts, args.timeout,
         )
-        all_passed.extend(passed)
-        all_failed.extend(failed)
+        all_passed.extend(passed); all_failed.extend(failed)
 
         if stage2_files and not all_failed:
             passed, failed = _run_stage(
-                "Stage 2: bronze/2 + gold/2",
-                stage2_files,
-                args.max_workers,
-                args.pytest_args,
-                tmp_base,
-                worker_counter,
-                args.timeout,
+                "Stage 2", stage2_files, args.max_workers, pytest_args,
+                tmp_base, worker_counter, notebook_runner_scripts, args.timeout,
             )
-            all_passed.extend(passed)
-            all_failed.extend(failed)
+            all_passed.extend(passed); all_failed.extend(failed)
         elif stage2_files and all_failed:
             print(f"\n{_yellow('Skipping Stage 2')} — Stage 1 had failures")
     finally:
@@ -446,7 +334,7 @@ def main():
           f"{_red(f'{len(all_failed)} failed') if all_failed else '0 failed'}  "
           f"in {total_duration:.1f}s")
     if all_failed:
-        print(f"\n  Failed files:")
+        print("\n  Failed files:")
         for f in all_failed:
             print(f"    {f}")
     print(f"{'═' * 60}")

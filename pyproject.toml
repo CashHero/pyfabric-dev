@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyfabric-dev"
-version = "0.1.0a0"
+version = "0.1.0"
 description = "Local development framework for Microsoft Fabric notebooks: source-of-truth Python, generated .Notebook artifacts, mocked Fabric APIs, parallel local testing."
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["microsoft-fabric", "pyspark", "delta-lake", "notebook", "medallion", "lakehouse"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent",
@@ -49,6 +49,8 @@ Changelog = "https://github.com/CashHero/pyfabric-dev/blob/main/CHANGELOG.md"
 [project.scripts]
 pyfabric-generate = "pyfabric_dev.cli.generate_notebooks:main"
 pyfabric-test = "pyfabric_dev.cli.run_tests_parallel:main"
+pyfabric-run-notebook = "pyfabric_dev.cli.run_notebook:main"
+pyfabric-run-pipeline = "pyfabric_dev.cli.run_pipeline:main"
 
 [tool.setuptools.packages.find]
 include = ["pyfabric_dev*"]

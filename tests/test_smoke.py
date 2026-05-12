@@ -13,7 +13,31 @@ def test_submodules_import():
 
 
 def test_cli_modules_import():
-    from pyfabric_dev.cli import generate_notebooks, run_tests_parallel  # noqa: F401
+    from pyfabric_dev.cli import (  # noqa: F401
+        generate_notebooks,
+        run_tests_parallel,
+        run_notebook,
+        run_pipeline,
+    )
+
+
+def test_runners_import():
+    from pyfabric_dev.runners import (  # noqa: F401
+        NotebookRunner,
+        PipelineRunner,
+        FabricIdResolver,
+        RunnerHooks,
+    )
+
+
+def test_runner_hooks_defaults():
+    from pyfabric_dev.runners import RunnerHooks
+
+    h = RunnerHooks()
+    assert h.initial_globals == {}
+    assert h.common_functions_overrides == {}
+    assert h.notebook_globals is None
+    assert h.common_functions_name == "common_functions"
 
 
 def test_framework_constants():
