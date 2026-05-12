@@ -1,0 +1,38 @@
+{
+  "properties": {
+    "activities": [
+      {
+        "name": "ingest_sales",
+        "type": "TridentNotebook",
+        "dependsOn": [],
+        "typeProperties": {
+          "notebookId": "d26957e0-78da-40c3-8248-b1c441645b1c",
+          "workspaceId": "00000000-0000-0000-0000-00000000aaaa"
+        }
+      },
+      {
+        "name": "transform_sales",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {"activity": "ingest_sales", "dependencyConditions": ["Succeeded"]}
+        ],
+        "typeProperties": {
+          "notebookId": "622ec4f1-1a08-49a9-95f1-551395d15044",
+          "workspaceId": "00000000-0000-0000-0000-00000000aaaa"
+        }
+      },
+      {
+        "name": "build_daily_summary",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {"activity": "transform_sales", "dependencyConditions": ["Succeeded"]}
+        ],
+        "typeProperties": {
+          "notebookId": "91c48eae-7439-49f4-80fe-afe3b614905e",
+          "workspaceId": "00000000-0000-0000-0000-00000000aaaa"
+        }
+      }
+    ],
+    "variables": {}
+  }
+}

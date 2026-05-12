@@ -29,9 +29,20 @@ from pathlib import Path
 from typing import Literal
 
 
-def load_lakehouse_config() -> dict:
-    """Load lakehouse configuration from external config file."""
-    config_path = Path(__file__).parent.parent / "config" / "lakehouse_config.json"
+# Project root is resolved at CLI invocation (via --project-root, or
+# Path.cwd() as a fallback). All source/output path computations route
+# through this global so the generator works for any consumer, not just
+# the package install location.
+PROJECT_ROOT: Path = Path.cwd()
+
+# Lakehouse config is loaded lazily after PROJECT_ROOT is set in main().
+LAKEHOUSE_CONFIGS: dict = {}
+
+
+def load_lakehouse_config(project_root: Path | None = None) -> dict:
+    """Load lakehouse configuration from <project_root>/config/lakehouse_config.json."""
+    root = project_root if project_root is not None else PROJECT_ROOT
+    config_path = root / "config" / "lakehouse_config.json"
 
     if not config_path.exists():
         print(f"Warning: Lakehouse config not found at {config_path}")
@@ -40,10 +51,6 @@ def load_lakehouse_config() -> dict:
 
     with open(config_path) as f:
         return json.load(f)
-
-
-# Load lakehouse configurations from external file
-LAKEHOUSE_CONFIGS = load_lakehouse_config()
 
 # Notebook naming prefixes
 LAYER_PREFIXES = {
@@ -282,7 +289,7 @@ def generate_common_defs_notebook() -> str:
     framework_defs cross-import stripped). framework_defs is the
     framework-extractable subset; defs.py holds CashHero specifics.
     """
-    project_root = Path(__file__).parent.parent
+    project_root = PROJECT_ROOT
     framework_defs_path = project_root / "src" / "common" / "framework_defs.py"
     defs_path = project_root / "src" / "common" / "defs.py"
 
@@ -317,7 +324,7 @@ def generate_common_defs_notebook() -> str:
 
 def generate_common_functions_notebook() -> str:
     """Generate the common_functions notebook content with inlined code."""
-    project_root = Path(__file__).parent.parent
+    project_root = PROJECT_ROOT
     functions_path = project_root / "src" / "common" / "functions.py"
     spark_path = project_root / "src" / "common" / "spark.py"
 
@@ -450,7 +457,7 @@ def generate_common_functions_notebook() -> str:
 
 def generate_quickbooks_auth_notebook() -> str:
     """Generate the 10_bronze_quickbooks_auth notebook with inlined code from quickbooks_auth.py."""
-    project_root = Path(__file__).parent.parent
+    project_root = PROJECT_ROOT
     module_path = project_root / "src" / "common" / "quickbooks_auth.py"
 
     content = ["# Fabric notebook source", ""]
@@ -499,7 +506,7 @@ def generate_quickbooks_auth_notebook() -> str:
 
 def generate_quickbooks_client_notebook() -> str:
     """Generate the 10_bronze_quickbooks_client notebook with inlined code from quickbooks_client.py."""
-    project_root = Path(__file__).parent.parent
+    project_root = PROJECT_ROOT
     module_path = project_root / "src" / "common" / "quickbooks_client.py"
 
     content = ["# Fabric notebook source", ""]
@@ -755,7 +762,7 @@ def module_imports_fabric_harness(module_path: Path) -> bool:
 def generate_test_notebook(config: NotebookConfig) -> str:
     """Generate a test notebook with inlined test code."""
     lakehouse_config = LAKEHOUSE_CONFIGS.get("tests")
-    project_root = Path(__file__).resolve().parent.parent
+    project_root = PROJECT_ROOT.resolve()
     fabric_harness_path = project_root / "tests" / "fabric_test_tables.py"
 
     content = ["# Fabric notebook source", ""]
@@ -1536,6 +1543,8 @@ def _validate_single_notebook(
 
 def main():
     parser = argparse.ArgumentParser(description="Generate Fabric notebooks from Python modules")
+    parser.add_argument("--project-root", type=Path, default=Path.cwd(),
+                        help="Consumer project root containing src/, config/, etc. (default: CWD)")
     parser.add_argument("--only", choices=["bronze", "silver", "gold", "backup", "common", "tests"],
                         help="Generate only notebooks for specified layer")
     parser.add_argument("--all", action="store_true",
@@ -1548,7 +1557,11 @@ def main():
                         help="Exit with non-zero status if validation finds issues in production notebooks")
     args = parser.parse_args()
 
-    project_root = Path(__file__).parent.parent
+    global PROJECT_ROOT, LAKEHOUSE_CONFIGS
+    PROJECT_ROOT = args.project_root.resolve()
+    LAKEHOUSE_CONFIGS = load_lakehouse_config(PROJECT_ROOT)
+
+    project_root = PROJECT_ROOT
     src_dir = project_root / "src"
     output_dir = args.output or project_root
 
@@ -1572,15 +1585,20 @@ def main():
         write_notebook(output_dir / "common", "common_functions", content, args.dry_run)
         generated_notebooks["common_functions"] = content
 
-    # Generate QuickBooks helper notebooks (placed in bronze/)
+    # Generate QuickBooks helper notebooks (placed in bronze/) only when the
+    # consumer ships the corresponding source modules. They're CashHero-flavored
+    # and won't be needed by most consumers.
     if args.only in [None, "bronze"] or args.all:
-        content = generate_quickbooks_auth_notebook()
-        write_notebook(output_dir / "bronze", "10_bronze_quickbooks_auth", content, args.dry_run)
-        generated_notebooks["10_bronze_quickbooks_auth"] = content
-
-        content = generate_quickbooks_client_notebook()
-        write_notebook(output_dir / "bronze", "10_bronze_quickbooks_client", content, args.dry_run)
-        generated_notebooks["10_bronze_quickbooks_client"] = content
+        qb_auth_src = project_root / "src" / "common" / "quickbooks_auth.py"
+        qb_client_src = project_root / "src" / "common" / "quickbooks_client.py"
+        if qb_auth_src.exists():
+            content = generate_quickbooks_auth_notebook()
+            write_notebook(output_dir / "bronze", "10_bronze_quickbooks_auth", content, args.dry_run)
+            generated_notebooks["10_bronze_quickbooks_auth"] = content
+        if qb_client_src.exists():
+            content = generate_quickbooks_client_notebook()
+            write_notebook(output_dir / "bronze", "10_bronze_quickbooks_client", content, args.dry_run)
+            generated_notebooks["10_bronze_quickbooks_client"] = content
 
     # Generate pipeline notebooks
     if args.only in [None, "bronze", "silver", "gold", "backup"] or args.all:
