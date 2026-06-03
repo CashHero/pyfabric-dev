@@ -339,7 +339,8 @@ def cf_merge_into_table(
     spark: SparkSession,
     logger: Logger,
     surrogate_key_col_name: str = None,
-    delete_when_not_matched_by_source: bool = True
+    delete_when_not_matched_by_source: bool = False,
+    not_matched_by_source_condition: str = None
 ) -> int:
     """
     Merge source_df into a Delta table, preserving surrogate keys.
@@ -351,7 +352,18 @@ def cf_merge_into_table(
         spark: SparkSession
         logger: Logger instance
         surrogate_key_col_name: Name of surrogate key column to preserve
-        delete_when_not_matched_by_source: Whether to delete unmatched rows
+        delete_when_not_matched_by_source: Whether to delete target rows not
+            matched by the source. Defaults to False. (Historically this
+            defaulted to True but the delete clause was silently dropped — see
+            note below — so callers effectively never deleted; False makes the
+            default match that real behavior.)
+        not_matched_by_source_condition: Optional SQL predicate (referencing the
+            ``target`` alias, e.g. ``"target.server IN ('cashhero')"``) that
+            restricts which unmatched target rows are deleted. Only applies when
+            ``delete_when_not_matched_by_source`` is True. Use it when the source
+            is a complete snapshot of only a subset of the target (e.g. one data
+            source within a shared table) so deletes don't reach rows the source
+            never intended to cover.
 
     Returns:
         Total number of rows inserted or updated
@@ -450,7 +462,15 @@ def cf_merge_into_table(
         )
 
         if delete_when_not_matched_by_source:
-            merge_builder.whenNotMatchedBySourceDelete()
+            # NOTE: the whenNotMatched* builder methods return a NEW builder
+            # rather than mutating in place, so the result must be reassigned or
+            # the delete clause is silently dropped.
+            if not_matched_by_source_condition:
+                merge_builder = merge_builder.whenNotMatchedBySourceDelete(
+                    condition=not_matched_by_source_condition
+                )
+            else:
+                merge_builder = merge_builder.whenNotMatchedBySourceDelete()
 
         merge_builder.execute()
 
