@@ -22,9 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING**: minimum Python is now **3.13** (was 3.10). Python 3.13
   and 3.14 are the supported matrix going forward.
 - `pyfabric-generate` now accepts `--project-root` and threads it
-  through every path computation. Previously it resolved paths relative
-  to the install location, which only worked for cashhero-fabric's
-  forked copy.
+  through every path computation.
 - `pyfabric-generate` no longer writes empty stub notebooks for
   CashHero-specific modules (`quickbooks_auth`, `quickbooks_client`)
   when the consumer doesn't ship those sources. The corresponding
@@ -60,9 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0-alpha] - 2026-05-12
 
-Initial extraction from the
-[cashhero-fabric](https://github.com/CashHero/cashhero-fabric) production
-pipeline.
+Initial extraction from the internal production pipeline.
 
 ### Added
 - `pyfabric_dev` package with `defs`, `spark`, `fabric`, `functions`,
@@ -77,6 +73,5 @@ pipeline.
 - Local notebook and pipeline runners (`run_notebook.py`, `run_pipeline.py`)
   are not yet shipped — they had ~10 CashHero coupling points; will land in
   `v0.1.0` after a cleanup pass.
-- No `examples/` project yet — see the README and the cashhero-fabric repo
-  for real-world usage.
+- No `examples/` project yet.
 - No CI matrix yet.

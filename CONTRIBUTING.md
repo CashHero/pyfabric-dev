@@ -34,9 +34,8 @@ You'll need Java 11+ on `PATH` for PySpark.
 ## Scope
 
 `pyfabric-dev` is **framework code**. CashHero-specific helpers (Priority ERP,
-QuickBooks ingestion, org onboarding logic) live in the closed-source
-[cashhero-fabric](https://github.com/CashHero/cashhero-fabric) repo and won't
-be accepted here.
+QuickBooks ingestion, org onboarding logic) live in a separate closed-source
+repo and won't be accepted here.
 
 If your contribution feels generic enough that *any* Fabric medallion project
 could use it, it belongs here. If it encodes business logic specific to your

@@ -15,13 +15,13 @@ notebooks. It solves two specific problems:
 ## Install
 
 ```bash
-pip install pyfabric-dev @ git+https://github.com/CashHero/pyfabric-dev.git@v0.2.0
+pip install pyfabric-dev
 ```
 
 Or pin in `requirements.txt`:
 
 ```
-pyfabric-dev @ git+https://github.com/CashHero/pyfabric-dev.git@v0.2.0
+pyfabric-dev==0.3.0
 ```
 
 Requirements:

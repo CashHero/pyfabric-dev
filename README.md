@@ -4,7 +4,7 @@ A development framework for [Microsoft Fabric](https://www.microsoft.com/fabric)
 notebooks. Write plain Python modules in `src/`, generate Fabric `.Notebook`
 artifacts from them, and run + test everything locally with mocked Fabric APIs.
 
-> **Status:** `v0.2.0`. APIs are stabilizing but pre-1.0; minor versions may break.
+> **Status:** `v0.3.0`. APIs are stabilizing but pre-1.0; minor versions may break.
 >
 > **Disclaimer:** not affiliated with or endorsed by Microsoft.
 
@@ -33,7 +33,7 @@ Fabric notebooks have two pain points:
 Requires **Python 3.13 or 3.14** and a JDK 17+ on `$PATH` (for PySpark).
 
 ```bash
-pip install "pyfabric-dev @ git+https://github.com/CashHero/pyfabric-dev.git@v0.2.0"
+pip install pyfabric-dev
 ```
 
 ## CLIs
@@ -73,8 +73,7 @@ toy sales data. See its `README.md` for details.
 
 ## Used in production by
 
-- [cashhero-fabric](https://github.com/CashHero/cashhero-fabric) — the
-  pipeline this framework was extracted from.
+- CashHero — the internal pipeline this framework was extracted from.
 
 ## Contributing
 

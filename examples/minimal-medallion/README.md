@@ -74,6 +74,5 @@ This example is intentionally tiny. It does **not** demonstrate:
   docstrings for that
 - Backup snapshots
 
-If you need a richer reference, look at
-[cashhero-fabric](https://github.com/CashHero/cashhero-fabric) — the
-production pipeline this framework was extracted from.
+This minimal example is the public reference. The framework was extracted from
+an internal production pipeline.
