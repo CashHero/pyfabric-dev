@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-09
+
+### Changed
+- Removed leftover CashHero branding from framework defaults, comments, and
+  docstrings: dropped the stale `.cashhero_fabric_dev/` `.gitignore` entry
+  (superseded by `.fabric_dev/`), and genericized example values in
+  `functions.py`, `run_tests_parallel.py`, and the generator's config docs.
+  No behavior change.
+
 ## [0.4.0] - 2026-06-09
 
 ### Added

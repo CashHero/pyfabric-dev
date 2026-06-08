@@ -358,7 +358,7 @@ def cf_merge_into_table(
             note below — so callers effectively never deleted; False makes the
             default match that real behavior.)
         not_matched_by_source_condition: Optional SQL predicate (referencing the
-            ``target`` alias, e.g. ``"target.server IN ('cashhero')"``) that
+            ``target`` alias, e.g. ``"target.source_system IN ('crm')"``) that
             restricts which unmatched target rows are deleted. Only applies when
             ``delete_when_not_matched_by_source`` is True. Use it when the source
             is a complete snapshot of only a subset of the target (e.g. one data

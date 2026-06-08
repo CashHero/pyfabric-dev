@@ -34,7 +34,6 @@ htmlcov/
 
 # Local dev state (Spark warehouse, Derby metastore, etc.)
 .fabric_dev/
-.cashhero_fabric_dev/
 spark-warehouse/
 metastore_db/
 derby.log
