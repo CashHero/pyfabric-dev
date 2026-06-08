@@ -21,7 +21,7 @@ pip install pyfabric-dev
 Or pin in `requirements.txt`:
 
 ```
-pyfabric-dev==0.3.0
+pyfabric-dev==0.3.1
 ```
 
 Requirements:
