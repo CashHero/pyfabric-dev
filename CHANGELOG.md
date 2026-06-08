@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-09
+
+### Added
+- **Config-driven generator** via an optional `config/notebook_generation.json`.
+  The generator no longer hardcodes any consumer's module or notebook names;
+  behavior is declared per project:
+  - `inline_framework_modules` — inline the `defs`/`functions`/`fabric` runtime
+    modules straight from the installed `pyfabric_dev` package instead of from
+    vendored copies under `src/common`, so consumers keep only their own code in
+    `src/common`.
+  - `common_functions_extra_modules` — extra `src/common` modules to inline into
+    `common_functions` after the primary functions module.
+  - `helper_notebooks` — standalone notebooks that each inline a single
+    `src/common` module (replaces the hardcoded QuickBooks generators).
+  - `notebook_run_dependencies` — per-notebook `%run` dependencies, with an
+    optional `suppress_main` wrapper.
+
+### Changed
+- Removed all hardcoded CashHero-specific names (`cashhero_org`, `quickbooks_*`,
+  `ingest_from_priority`, `onboard_org`, …) from the generator; collapsed the
+  two QuickBooks notebook generators into one parametrized
+  `generate_helper_notebook`. The default (no config file) path is unchanged and
+  byte-identical to prior output.
+
 ## [0.3.1] - 2026-06-09
 
 ### Added
