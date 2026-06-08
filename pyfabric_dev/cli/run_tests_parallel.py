@@ -302,7 +302,7 @@ def main():
         return
 
     # Worker tmpdir lives under DEV_BASE_DIR so it follows whatever the
-    # consumer configured (e.g. ~/.cashhero_fabric_dev/<hash>/...).
+    # consumer configured (e.g. ~/.fabric_dev/<hash>/...).
     from pyfabric_dev.local_config import DEV_BASE_DIR
     tmp_base = str(DEV_BASE_DIR / "_parallel_workers")
 

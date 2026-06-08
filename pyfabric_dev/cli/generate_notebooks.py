@@ -54,7 +54,7 @@ NOTEBOOK_GEN_DEFAULTS = {
     # their own code in src/common and let pip own the framework runtime.
     "inline_framework_modules": False,
     # Extra src/common modules inlined into common_functions after the primary
-    # functions module (e.g. ["cashhero_org.py"]).
+    # functions module (e.g. ["domain_helpers.py"]).
     "common_functions_extra_modules": [],
     "helper_notebooks": [],
     "notebook_run_dependencies": {},
@@ -351,9 +351,9 @@ def read_module_code(module_path: Path, skip_imports: list[str] = None, skip_top
 def generate_common_defs_notebook() -> str:
     """Generate the common_defs notebook content with inlined code.
 
-    Inlines framework_defs.py first, then defs.py (with the
-    framework_defs cross-import stripped). framework_defs is the
-    framework-extractable subset; defs.py holds CashHero specifics.
+    Inlines the framework defs module first, then defs.py (with the
+    framework_defs cross-import stripped). The framework defs module is the
+    shared subset; defs.py holds the consumer's project-specific definitions.
     """
     project_root = PROJECT_ROOT
     inline_framework = NOTEBOOK_GEN_CONFIG.get("inline_framework_modules", False)
