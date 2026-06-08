@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-09
+
+### Added
+- GitHub Actions Trusted Publishing workflow (`.github/workflows/publish.yml`)
+  that builds and publishes to PyPI on release.
+
+### Changed
+- Install instructions across the README and docs now use PyPI
+  (`pip install pyfabric-dev`), replacing the previous Git-URL install.
+- Removed documentation links to the closed-source internal pipeline repo.
+
+## [0.3.0] - 2026-06-03
+
+First release published to **PyPI** — install with `pip install pyfabric-dev`.
+
+### Added
+- `cf_merge_into_table`: new optional `not_matched_by_source_condition`
+  parameter — a SQL predicate on the `target` alias (e.g.
+  `"target.server IN ('acme')"`) that **scopes** `whenNotMatchedBySource`
+  deletes, so a source that snapshots only a subset of the table doesn't
+  delete rows outside its scope.
+
+### Fixed
+- `cf_merge_into_table`: the `whenNotMatchedBySourceDelete()` clause was
+  silently dropped — the Delta builder returns a new object, but the result
+  wasn't reassigned, so the clause never reached `execute()` and deletes never
+  ran (framework-wide). Now reassigned and effective.
+
+### Changed
+- **BREAKING (behavioral):** `cf_merge_into_table`'s
+  `delete_when_not_matched_by_source` now defaults to `False` (was `True`).
+  Because the delete clause was previously a no-op, no caller actually got
+  deletes; the new default matches the prior observed behavior and prevents the
+  bugfix above from silently enabling deletes for existing callers. Opt in
+  explicitly where deletes are wanted.
+
 ## [0.2.0] - 2026-05-12
 
 ### Added
@@ -22,9 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING**: minimum Python is now **3.13** (was 3.10). Python 3.13
   and 3.14 are the supported matrix going forward.
 - `pyfabric-generate` now accepts `--project-root` and threads it
-  through every path computation. Previously it resolved paths relative
-  to the install location, which only worked for cashhero-fabric's
-  forked copy.
+  through every path computation.
 - `pyfabric-generate` no longer writes empty stub notebooks for
   CashHero-specific modules (`quickbooks_auth`, `quickbooks_client`)
   when the consumer doesn't ship those sources. The corresponding
@@ -60,9 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0-alpha] - 2026-05-12
 
-Initial extraction from the
-[cashhero-fabric](https://github.com/CashHero/cashhero-fabric) production
-pipeline.
+Initial extraction from the internal production pipeline.
 
 ### Added
 - `pyfabric_dev` package with `defs`, `spark`, `fabric`, `functions`,
@@ -77,6 +109,5 @@ pipeline.
 - Local notebook and pipeline runners (`run_notebook.py`, `run_pipeline.py`)
   are not yet shipped — they had ~10 CashHero coupling points; will land in
   `v0.1.0` after a cleanup pass.
-- No `examples/` project yet — see the README and the cashhero-fabric repo
-  for real-world usage.
+- No `examples/` project yet.
 - No CI matrix yet.

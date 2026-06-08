@@ -100,10 +100,9 @@ PipelineRunner(project_root, resolver, hooks=hooks).run_pipeline(pipeline_path)
 The CLIs (`pyfabric-run-notebook`, `pyfabric-run-pipeline`) construct
 runners **without** hooks. If you need hooks, write a 30-line wrapper
 script in your project that constructs `RunnerHooks` and calls the
-runners directly. The `dev/run_notebook.py` shim in
-[cashhero-fabric](https://github.com/CashHero/cashhero-fabric/blob/staging/dev/run_notebook.py)
-is a working example of this pattern — a subclass that auto-applies
-the hooks, so consumer tests can keep instantiating `NotebookRunner(path, root)`.
+runners directly. A typical pattern is a thin `dev/run_notebook.py` shim — a
+`NotebookRunner` subclass that auto-applies the hooks, so consumer tests can
+keep instantiating `NotebookRunner(path, root)`.
 
 ## When you don't need hooks
 
