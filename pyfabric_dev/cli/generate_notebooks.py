@@ -21,6 +21,7 @@ Usage:
 
 import argparse
 import ast
+import importlib.util
 import json
 import os
 import sys
@@ -38,6 +39,53 @@ PROJECT_ROOT: Path = Path.cwd()
 # Lakehouse config is loaded lazily after PROJECT_ROOT is set in main().
 LAKEHOUSE_CONFIGS: dict = {}
 
+# Notebook-generation config: declares consumer-specific generator behavior
+# (extra modules to inline, helper notebooks, per-notebook %run deps) without
+# hardcoding any one project's module names here. Loaded in main().
+NOTEBOOK_GEN_CONFIG: dict = {}
+
+# Defaults when no config/notebook_generation.json is present. These reproduce
+# the generator's baseline behavior: inline the framework runtime modules that
+# the consumer vendors in src/common, no extra domain modules, no helper
+# notebooks, no extra %run deps.
+NOTEBOOK_GEN_DEFAULTS = {
+    # When True, the defs/functions/fabric slots are inlined from the installed
+    # pyfabric_dev package rather than from src/common — so consumers keep only
+    # their own code in src/common and let pip own the framework runtime.
+    "inline_framework_modules": False,
+    # Extra src/common modules inlined into common_functions after the primary
+    # functions module (e.g. ["cashhero_org.py"]).
+    "common_functions_extra_modules": [],
+    "helper_notebooks": [],
+    "notebook_run_dependencies": {},
+}
+
+
+def framework_module_path(module_name: str) -> Path:
+    """Resolve the source path of a framework runtime module in the installed package.
+
+    e.g. framework_module_path("functions") -> .../pyfabric_dev/functions.py.
+    Used when inline_framework_modules is set, so generated notebooks inline the
+    framework's own code straight from the installed package instead of from a
+    vendored copy under src/common.
+    """
+    # find_spec locates the module's source file without importing/executing it,
+    # so generation doesn't require the framework's runtime deps (pyspark, etc.).
+    spec = importlib.util.find_spec(f"pyfabric_dev.{module_name}")
+    if spec is None or not spec.origin:
+        raise ImportError(
+            f"Could not locate pyfabric_dev.{module_name}. inline_framework_modules "
+            "inlines framework code from the installed pyfabric-dev package; "
+            "ensure it is installed (pip install pyfabric-dev)."
+        )
+    path = Path(spec.origin)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"pyfabric_dev.{module_name} resolved to {path} but the file is missing. "
+            "Reinstall pyfabric-dev."
+        )
+    return path
+
 
 def load_lakehouse_config(project_root: Path | None = None) -> dict:
     """Load lakehouse configuration from <project_root>/config/lakehouse_config.json."""
@@ -51,6 +99,24 @@ def load_lakehouse_config(project_root: Path | None = None) -> dict:
 
     with open(config_path) as f:
         return json.load(f)
+
+
+def load_notebook_generation_config(project_root: Path | None = None) -> dict:
+    """Load generator config from <project_root>/config/notebook_generation.json.
+
+    Optional. When absent, NOTEBOOK_GEN_DEFAULTS are used, which reproduce the
+    generator's baseline behavior (inline functions.py only). Consumers with
+    extra common modules, standalone helper notebooks, or per-notebook ``%run``
+    dependencies declare them here rather than relying on hardcoded names.
+    """
+    root = project_root if project_root is not None else PROJECT_ROOT
+    config_path = root / "config" / "notebook_generation.json"
+
+    config = dict(NOTEBOOK_GEN_DEFAULTS)
+    if config_path.exists():
+        with open(config_path) as f:
+            config.update(json.load(f))
+    return config
 
 # Notebook naming prefixes
 LAYER_PREFIXES = {
@@ -290,14 +356,18 @@ def generate_common_defs_notebook() -> str:
     framework-extractable subset; defs.py holds CashHero specifics.
     """
     project_root = PROJECT_ROOT
-    framework_defs_path = project_root / "src" / "common" / "framework_defs.py"
+    inline_framework = NOTEBOOK_GEN_CONFIG.get("inline_framework_modules", False)
+    framework_defs_path = (
+        framework_module_path("defs") if inline_framework
+        else project_root / "src" / "common" / "framework_defs.py"
+    )
     defs_path = project_root / "src" / "common" / "defs.py"
 
     content = ["# Fabric notebook source", ""]
     content.append(generate_metadata_block())
     content.append("")
 
-    # Cell 1: Inlined code from src/common/framework_defs.py + src/common/defs.py
+    # Cell 1: Inlined code from the framework defs module + src/common/defs.py
     content.append("# CELL ********************")
     content.append("")
 
@@ -309,6 +379,8 @@ def generate_common_defs_notebook() -> str:
         code = read_module_code(defs_path, skip_imports=[
             "from src.common",
             "import src.common",
+            "from pyfabric_dev",
+            "import pyfabric_dev",
         ])
         content.append(code.rstrip())
     else:
@@ -325,8 +397,23 @@ def generate_common_defs_notebook() -> str:
 def generate_common_functions_notebook() -> str:
     """Generate the common_functions notebook content with inlined code."""
     project_root = PROJECT_ROOT
-    functions_path = project_root / "src" / "common" / "functions.py"
-    spark_path = project_root / "src" / "common" / "spark.py"
+    inline_framework = NOTEBOOK_GEN_CONFIG.get("inline_framework_modules", False)
+    # Primary functions/fabric modules: from the installed package when inlining
+    # framework modules, otherwise the consumer's vendored copies in src/common.
+    primary_path = (
+        framework_module_path("functions") if inline_framework
+        else project_root / "src" / "common" / "functions.py"
+    )
+    fabric_path = (
+        framework_module_path("fabric") if inline_framework
+        else project_root / "src" / "common" / "fabric.py"
+    )
+    # Extra domain modules (from src/common) inlined after the primary.
+    extra_paths = [
+        project_root / "src" / "common" / name
+        for name in NOTEBOOK_GEN_CONFIG.get("common_functions_extra_modules", [])
+    ]
+    all_module_paths = [primary_path, *extra_paths]
 
     lakehouse_config = LAKEHOUSE_CONFIGS.get("bronze")  # Default to bronze
 
@@ -346,21 +433,20 @@ def generate_common_functions_notebook() -> str:
     content.append("# CELL ********************")
     content.append("")
 
-    # Extract imports from src/common/functions.py + cashhero_org.py,
-    # excluding src.common imports (provided by %run common_defs).
-    # Deduplicate so symbols common to both files appear once.
-    cashhero_org_path = project_root / "src" / "common" / "cashhero_org.py"
-    if functions_path.exists():
-        imports = extract_imports_from_module(functions_path, skip_imports=[
-            "from src.common",
-            "import src.common",
-        ])
-        if cashhero_org_path.exists():
-            extra_imports = extract_imports_from_module(cashhero_org_path, skip_imports=[
+    # Extract imports from the primary functions module plus any extra domain
+    # modules, excluding src.common / pyfabric_dev imports (provided by %run
+    # common_defs or the package). Deduplicate so shared symbols appear once.
+    if primary_path.exists():
+        imports: list[str] = []
+        for module_path in all_module_paths:
+            if not module_path.exists():
+                continue
+            for imp in extract_imports_from_module(module_path, skip_imports=[
                 "from src.common",
                 "import src.common",
-            ])
-            for imp in extra_imports:
+                "from pyfabric_dev",
+                "import pyfabric_dev",
+            ]):
                 if imp not in imports:
                     imports.append(imp)
 
@@ -377,17 +463,16 @@ def generate_common_functions_notebook() -> str:
         for imp in fabric_imports:
             content.append(imp)
     else:
-        content.append("# WARNING: src/common/functions.py not found")
+        content.append(f"# WARNING: src/common/{primary_path.name} not found")
 
     content.append("")
     content.append(generate_cell_metadata())
     content.append("")
 
-    # Cell 3: Fabric-specific utilities (extracted from src/common/fabric.py)
+    # Cell 3: Fabric-specific utilities (from the framework fabric module)
     content.append("# CELL ********************")
     content.append("")
 
-    fabric_path = project_root / "src" / "common" / "fabric.py"
     if fabric_path.exists():
         # Extract functions from fabric.py, skipping all imports
         code = read_module_code(fabric_path, skip_imports=[
@@ -423,30 +508,31 @@ def generate_common_functions_notebook() -> str:
     content.append(generate_cell_metadata())
     content.append("")
 
-    # Cell 5: Inlined functions from src/common/functions.py + cashhero_org.py
-    # functions.py is the framework-extractable subset; cashhero_org.py is
-    # the CashHero-domain subset. Both are inlined into the same notebook
-    # so callers see all symbols in a single namespace after %run.
+    # Cell 5: Inlined module code. functions.py is the framework-extractable
+    # subset; any consumer-declared domain modules are appended after it. All
+    # are inlined into the same notebook so callers see every symbol in a
+    # single namespace after %run.
     content.append("# CELL ********************")
     content.append("")
 
-    if functions_path.exists():
+    if primary_path.exists():
         # Skip all imports since they're already in Cell 2
-        code = read_module_code(functions_path, skip_imports=[
+        code = read_module_code(primary_path, skip_imports=[
             "import ",
             "from ",
         ])
         content.append(code.rstrip())
     else:
-        content.append("# WARNING: src/common/functions.py not found")
+        content.append(f"# WARNING: src/common/{primary_path.name} not found")
 
-    if cashhero_org_path.exists():
-        content.append("")
-        code = read_module_code(cashhero_org_path, skip_imports=[
-            "import ",
-            "from ",
-        ])
-        content.append(code.rstrip())
+    for module_path in extra_paths:
+        if module_path.exists():
+            content.append("")
+            code = read_module_code(module_path, skip_imports=[
+                "import ",
+                "from ",
+            ])
+            content.append(code.rstrip())
 
     content.append("")
     content.append(generate_cell_metadata())
@@ -455,16 +541,21 @@ def generate_common_functions_notebook() -> str:
     return "\n".join(content)
 
 
-def generate_quickbooks_auth_notebook() -> str:
-    """Generate the 10_bronze_quickbooks_auth notebook with inlined code from quickbooks_auth.py."""
-    project_root = PROJECT_ROOT
-    module_path = project_root / "src" / "common" / "quickbooks_auth.py"
+def generate_helper_notebook(source_module: str) -> str:
+    """Generate a standalone helper notebook that inlines a single src/common module.
+
+    The notebook %runs common_defs (for shared constants) and inlines the
+    functions from ``src/common/<source_module>``. Consumers declare these via
+    the ``helper_notebooks`` entry in config/notebook_generation.json; the
+    framework no longer hardcodes any particular module name.
+    """
+    module_path = PROJECT_ROOT / "src" / "common" / source_module
 
     content = ["# Fabric notebook source", ""]
     content.append(generate_metadata_block())
     content.append("")
 
-    # Cell 1: Run common_defs (needed for QUICKBOOKS_TOKEN_URL)
+    # Cell 1: Run common_defs (provides shared constants the helper may need)
     content.append("# CELL ********************")
     content.append("")
     content.append("%run common_defs")
@@ -496,56 +587,7 @@ def generate_quickbooks_auth_notebook() -> str:
         ], skip_top_level_only=True)
         content.append(code.rstrip())
     else:
-        content.append("# WARNING: src/common/quickbooks_auth.py not found")
-    content.append("")
-    content.append(generate_cell_metadata())
-    content.append("")
-
-    return "\n".join(content)
-
-
-def generate_quickbooks_client_notebook() -> str:
-    """Generate the 10_bronze_quickbooks_client notebook with inlined code from quickbooks_client.py."""
-    project_root = PROJECT_ROOT
-    module_path = project_root / "src" / "common" / "quickbooks_client.py"
-
-    content = ["# Fabric notebook source", ""]
-    content.append(generate_metadata_block())
-    content.append("")
-
-    # Cell 1: Run common_defs (needed for QUICKBOOKS_API_BASE_URL etc.)
-    content.append("# CELL ********************")
-    content.append("")
-    content.append("%run common_defs")
-    content.append("")
-    content.append(generate_cell_metadata())
-    content.append("")
-
-    # Cell 2: Imports
-    content.append("# CELL ********************")
-    content.append("")
-    if module_path.exists():
-        imports = extract_imports_from_module(module_path, skip_imports=[
-            "from src.common",
-            "import src.common",
-        ])
-        for imp in imports:
-            content.append(imp)
-    content.append("")
-    content.append(generate_cell_metadata())
-    content.append("")
-
-    # Cell 3: Inlined code (functions only, top-level imports stripped)
-    content.append("# CELL ********************")
-    content.append("")
-    if module_path.exists():
-        code = read_module_code(module_path, skip_imports=[
-            "import ",
-            "from ",
-        ], skip_top_level_only=True)
-        content.append(code.rstrip())
-    else:
-        content.append("# WARNING: src/common/quickbooks_client.py not found")
+        content.append(f"# WARNING: src/common/{source_module} not found")
     content.append("")
     content.append(generate_cell_metadata())
     content.append("")
@@ -569,54 +611,43 @@ def generate_pipeline_notebook(config: NotebookConfig) -> str:
     content.append(generate_cell_metadata())
     content.append("")
 
-    # Special case: notebooks that need update_watermark_table functions
-    if ("ingest_from_priority" in config.notebook_name
-            or "post_process_priority_extract" in config.notebook_name):
-        content.append("# CELL ********************")
-        content.append("")
-        content.append("%run 10_bronze_update_watermark_table")
-        content.append("")
-        content.append(generate_cell_metadata())
-        content.append("")
+    # Inject %run dependencies declared for this notebook in
+    # config/notebook_generation.json. Each entry maps a notebook-name
+    # substring to the notebooks that must run first. An entry may be a plain
+    # list of targets, or an object with "runs" plus "suppress_main": true to
+    # load those deps without executing their run() entry points (the deps are
+    # bracketed by RUN_MAIN = False / restore cells).
+    for key, spec in NOTEBOOK_GEN_CONFIG.get("notebook_run_dependencies", {}).items():
+        if key not in config.notebook_name:
+            continue
+        if isinstance(spec, list):
+            spec = {"runs": spec}
+        suppress_main = spec.get("suppress_main", False)
 
-    # Special case: QuickBooks ingestion needs auth and client helpers
-    if "ingest_from_quickbooks" in config.notebook_name:
-        content.append("# CELL ********************")
-        content.append("")
-        content.append("%run 10_bronze_quickbooks_auth")
-        content.append("")
-        content.append(generate_cell_metadata())
-        content.append("")
+        if suppress_main:
+            content.append("# CELL ********************")
+            content.append("")
+            content.append("_SAVED_RUN_MAIN = globals().get('RUN_MAIN', True)")
+            content.append("RUN_MAIN = False")
+            content.append("")
+            content.append(generate_cell_metadata())
+            content.append("")
 
-        content.append("# CELL ********************")
-        content.append("")
-        content.append("%run 10_bronze_quickbooks_client")
-        content.append("")
-        content.append(generate_cell_metadata())
-        content.append("")
+        for run_target in spec.get("runs", []):
+            content.append("# CELL ********************")
+            content.append("")
+            content.append(f"%run {run_target}")
+            content.append("")
+            content.append(generate_cell_metadata())
+            content.append("")
 
-    # Special case: onboard_org needs finalize_accounts for globals().
-    # Set RUN_MAIN = False so %run loads functions without executing their run() entry points.
-    if "onboard_org" in config.notebook_name:
-        content.append("# CELL ********************")
-        content.append("")
-        content.append("_SAVED_RUN_MAIN = globals().get('RUN_MAIN', True)")
-        content.append("RUN_MAIN = False")
-        content.append("")
-        content.append(generate_cell_metadata())
-        content.append("")
-        content.append("# CELL ********************")
-        content.append("")
-        content.append("%run 30_gold_finalize_accounts")
-        content.append("")
-        content.append(generate_cell_metadata())
-        content.append("")
-        content.append("# CELL ********************")
-        content.append("")
-        content.append("RUN_MAIN = _SAVED_RUN_MAIN")
-        content.append("")
-        content.append(generate_cell_metadata())
-        content.append("")
+        if suppress_main:
+            content.append("# CELL ********************")
+            content.append("")
+            content.append("RUN_MAIN = _SAVED_RUN_MAIN")
+            content.append("")
+            content.append(generate_cell_metadata())
+            content.append("")
 
     # Cell 2: Parameters (if any)
     if config.parameters:
@@ -1557,9 +1588,10 @@ def main():
                         help="Exit with non-zero status if validation finds issues in production notebooks")
     args = parser.parse_args()
 
-    global PROJECT_ROOT, LAKEHOUSE_CONFIGS
+    global PROJECT_ROOT, LAKEHOUSE_CONFIGS, NOTEBOOK_GEN_CONFIG
     PROJECT_ROOT = args.project_root.resolve()
     LAKEHOUSE_CONFIGS = load_lakehouse_config(PROJECT_ROOT)
+    NOTEBOOK_GEN_CONFIG = load_notebook_generation_config(PROJECT_ROOT)
 
     project_root = PROJECT_ROOT
     src_dir = project_root / "src"
@@ -1585,20 +1617,19 @@ def main():
         write_notebook(output_dir / "common", "common_functions", content, args.dry_run)
         generated_notebooks["common_functions"] = content
 
-    # Generate QuickBooks helper notebooks (placed in bronze/) only when the
-    # consumer ships the corresponding source modules. They're CashHero-flavored
-    # and won't be needed by most consumers.
-    if args.only in [None, "bronze"] or args.all:
-        qb_auth_src = project_root / "src" / "common" / "quickbooks_auth.py"
-        qb_client_src = project_root / "src" / "common" / "quickbooks_client.py"
-        if qb_auth_src.exists():
-            content = generate_quickbooks_auth_notebook()
-            write_notebook(output_dir / "bronze", "10_bronze_quickbooks_auth", content, args.dry_run)
-            generated_notebooks["10_bronze_quickbooks_auth"] = content
-        if qb_client_src.exists():
-            content = generate_quickbooks_client_notebook()
-            write_notebook(output_dir / "bronze", "10_bronze_quickbooks_client", content, args.dry_run)
-            generated_notebooks["10_bronze_quickbooks_client"] = content
+    # Generate consumer-declared helper notebooks: standalone notebooks that
+    # each inline a single src/common module. Declared in
+    # config/notebook_generation.json (empty by default), generated only when
+    # the source module is present.
+    for spec in NOTEBOOK_GEN_CONFIG.get("helper_notebooks", []):
+        layer = spec.get("layer", "bronze")
+        if args.only not in [None, layer] and not args.all:
+            continue
+        source = spec["source"]
+        if (project_root / "src" / "common" / source).exists():
+            content = generate_helper_notebook(source)
+            write_notebook(output_dir / layer, spec["name"], content, args.dry_run)
+            generated_notebooks[spec["name"]] = content
 
     # Generate pipeline notebooks
     if args.only in [None, "bronze", "silver", "gold", "backup"] or args.all:
