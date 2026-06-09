@@ -9,7 +9,7 @@
 # META   "dependencies": {
 # META     "lakehouse": {
 # META       "default_lakehouse": "00000000-0000-0000-0000-000000000001",
-# META       "default_lakehouse_name": "bronze_lakehouse",
+# META       "default_lakehouse_name": "lakehouse",
 # META       "default_lakehouse_workspace_id": "00000000-0000-0000-0000-00000000aaaa",
 # META       "known_lakehouses": [
 # META         {
@@ -79,12 +79,7 @@ def run(spark: SparkSession, logger: Logger) -> None:
     )
     logger.info(f"Read {df.count()} raw rows")
 
-    (
-        df.write
-        .format("delta")
-        .mode("overwrite")
-        .saveAsTable(BRONZE_TABLE_SALES_RAW)
-    )
+    cf_overwrite_table(spark, df, BRONZE_TABLE_SALES_RAW)  # noqa: F821
     logger.info(f"Wrote {BRONZE_TABLE_SALES_RAW}")
 
 # METADATA ********************

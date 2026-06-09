@@ -8,15 +8,12 @@
 # META   },
 # META   "dependencies": {
 # META     "lakehouse": {
-# META       "default_lakehouse": "00000000-0000-0000-0000-000000000002",
-# META       "default_lakehouse_name": "silver_lakehouse",
+# META       "default_lakehouse": "00000000-0000-0000-0000-000000000001",
+# META       "default_lakehouse_name": "lakehouse",
 # META       "default_lakehouse_workspace_id": "00000000-0000-0000-0000-00000000aaaa",
 # META       "known_lakehouses": [
 # META         {
 # META           "id": "00000000-0000-0000-0000-000000000001"
-# META         },
-# META         {
-# META           "id": "00000000-0000-0000-0000-000000000002"
 # META         }
 # META       ]
 # META     }
@@ -90,12 +87,7 @@ def run(spark: SparkSession, logger: Logger) -> None:
     clean = clean_sales(raw)
     logger.info(f"After clean: {clean.count()} rows")
 
-    (
-        clean.write
-        .format("delta")
-        .mode("overwrite")
-        .saveAsTable(SILVER_TABLE_SALES_CLEAN)
-    )
+    cf_overwrite_table(spark, clean, SILVER_TABLE_SALES_CLEAN)  # noqa: F821
     logger.info(f"Wrote {SILVER_TABLE_SALES_CLEAN}")
 
 # METADATA ********************

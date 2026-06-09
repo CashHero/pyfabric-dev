@@ -8,15 +8,12 @@
 # META   },
 # META   "dependencies": {
 # META     "lakehouse": {
-# META       "default_lakehouse": "00000000-0000-0000-0000-000000000003",
-# META       "default_lakehouse_name": "gold_lakehouse",
+# META       "default_lakehouse": "00000000-0000-0000-0000-000000000001",
+# META       "default_lakehouse_name": "lakehouse",
 # META       "default_lakehouse_workspace_id": "00000000-0000-0000-0000-00000000aaaa",
 # META       "known_lakehouses": [
 # META         {
-# META           "id": "00000000-0000-0000-0000-000000000002"
-# META         },
-# META         {
-# META           "id": "00000000-0000-0000-0000-000000000003"
+# META           "id": "00000000-0000-0000-0000-000000000001"
 # META         }
 # META       ]
 # META     }
@@ -88,12 +85,7 @@ def run(spark: SparkSession, logger: Logger) -> None:
     daily = aggregate_daily(clean)
     logger.info(f"Built daily summary: {daily.count()} day(s)")
 
-    (
-        daily.write
-        .format("delta")
-        .mode("overwrite")
-        .saveAsTable(GOLD_TABLE_SALES_DAILY_SUMMARY)
-    )
+    cf_overwrite_table(spark, daily, GOLD_TABLE_SALES_DAILY_SUMMARY)  # noqa: F821
     logger.info(f"Wrote {GOLD_TABLE_SALES_DAILY_SUMMARY}")
 
 # METADATA ********************

@@ -43,7 +43,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.13", "3.14"]
+        # The example pins Fabric Runtime 1.3 deps (Spark 3.5 / Delta 3.2),
+        # which target Python 3.13. The framework itself is tested on 3.13+3.14
+        # in the `test` job above.
+        python-version: ["3.13"]
 
     steps:
       - uses: actions/checkout@v6
@@ -58,10 +61,14 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install package + test deps
+      - name: Install package + Fabric-matching deps
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          # Editable local package, then the example's Fabric Runtime 1.3 pins
+          # (pyspark 3.5.7 / delta-spark 3.2.1). The pins downgrade the package's
+          # looser floors so local execution matches Fabric.
+          pip install -e .
+          pip install -r examples/minimal-medallion/requirements.txt
 
       - name: Generate notebooks for the example
         working-directory: examples/minimal-medallion
@@ -76,13 +83,23 @@ jobs:
             exit 1
           fi
 
+      - name: Run the pipeline end-to-end (stage data, then bronze → silver → gold)
+        working-directory: examples/minimal-medallion
+        env:
+          # GitHub-hosted runners have ~7GB total memory; dial the JVM heap down
+          # from the 8GB default so Spark doesn't get OOM-killed.
+          FABRIC_DEV_DRIVER_MEMORY: 2g
+          FABRIC_DEV_DRIVER_MAX_RESULT_SIZE: 1g
+          FABRIC_DEV_EXECUTOR_MEMORY: 2g
+        run: |
+          python stage_data.py
+          pyfabric-run-pipeline --project-root . sales_etl
+
       - name: Run example's tests
         working-directory: examples/minimal-medallion
         env:
-          # GitHub-hosted runners have ~7GB total memory; the framework's
-          # default 8GB-per-JVM Spark settings would OOM-kill a second
-          # parallel worker. Dial both down and serialize the workers so
-          # consecutive Spark sessions don't fight for the JVM heap.
+          # Serialize workers so consecutive Spark sessions don't fight for the
+          # JVM heap on the memory-constrained runner.
           FABRIC_DEV_DRIVER_MEMORY: 2g
           FABRIC_DEV_DRIVER_MAX_RESULT_SIZE: 1g
           FABRIC_DEV_EXECUTOR_MEMORY: 2g

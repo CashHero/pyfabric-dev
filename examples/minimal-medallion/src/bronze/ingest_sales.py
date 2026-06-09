@@ -19,10 +19,5 @@ def run(spark: SparkSession, logger: Logger) -> None:
     )
     logger.info(f"Read {df.count()} raw rows")
 
-    (
-        df.write
-        .format("delta")
-        .mode("overwrite")
-        .saveAsTable(BRONZE_TABLE_SALES_RAW)
-    )
+    cf_overwrite_table(spark, df, BRONZE_TABLE_SALES_RAW)  # noqa: F821
     logger.info(f"Wrote {BRONZE_TABLE_SALES_RAW}")
