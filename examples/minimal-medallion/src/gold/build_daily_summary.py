@@ -26,10 +26,5 @@ def run(spark: SparkSession, logger: Logger) -> None:
     daily = aggregate_daily(clean)
     logger.info(f"Built daily summary: {daily.count()} day(s)")
 
-    (
-        daily.write
-        .format("delta")
-        .mode("overwrite")
-        .saveAsTable(GOLD_TABLE_SALES_DAILY_SUMMARY)
-    )
+    cf_overwrite_table(spark, daily, GOLD_TABLE_SALES_DAILY_SUMMARY)  # noqa: F821
     logger.info(f"Wrote {GOLD_TABLE_SALES_DAILY_SUMMARY}")

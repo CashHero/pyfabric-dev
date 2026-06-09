@@ -293,6 +293,14 @@ class NotebookRunner:
                 or self.hooks.common_functions_name in str(notebook_path)
             )
 
+            # Ensure a Delta-enabled Spark session is available before any cell
+            # runs. Hook-less CLI runs inject no `_spark`, and a notebook's own
+            # ``getOrCreate()`` would otherwise yield a session without Delta
+            # wired in. Consumers that supply ``_spark`` via hooks are untouched.
+            if "_spark" not in self.globals_dict:
+                from pyfabric_dev.spark import create_spark_session
+                self.globals_dict["_spark"] = create_spark_session()
+
             for i, cell in enumerate(cells, 1):
                 pending_db = getattr(self, "_pending_default_db", None)
                 if pending_db and "_spark" in self.globals_dict:

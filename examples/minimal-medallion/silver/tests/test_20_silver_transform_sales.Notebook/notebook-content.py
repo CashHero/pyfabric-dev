@@ -9,7 +9,7 @@
 # META   "dependencies": {
 # META     "lakehouse": {
 # META       "default_lakehouse": "00000000-0000-0000-0000-000000000001",
-# META       "default_lakehouse_name": "bronze_lakehouse",
+# META       "default_lakehouse_name": "lakehouse",
 # META       "default_lakehouse_workspace_id": "00000000-0000-0000-0000-00000000aaaa",
 # META       "known_lakehouses": []
 # META     }

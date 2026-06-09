@@ -28,10 +28,5 @@ def run(spark: SparkSession, logger: Logger) -> None:
     clean = clean_sales(raw)
     logger.info(f"After clean: {clean.count()} rows")
 
-    (
-        clean.write
-        .format("delta")
-        .mode("overwrite")
-        .saveAsTable(SILVER_TABLE_SALES_CLEAN)
-    )
+    cf_overwrite_table(spark, clean, SILVER_TABLE_SALES_CLEAN)  # noqa: F821
     logger.info(f"Wrote {SILVER_TABLE_SALES_CLEAN}")

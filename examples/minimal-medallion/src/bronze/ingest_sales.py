@@ -1,6 +1,6 @@
 """Bronze: read sales CSV drops and land them as a Delta table.
 
-In Fabric this notebook reads from the Files/ tree of bronze_lakehouse.
+In Fabric this notebook reads from the Files/ tree of the lakehouse.
 Locally the same path resolves under DEV_BASE_DIR's lakehouse/default/Files.
 """
 from logging import Logger
@@ -19,10 +19,5 @@ def run(spark: SparkSession, logger: Logger) -> None:
     )
     logger.info(f"Read {df.count()} raw rows")
 
-    (
-        df.write
-        .format("delta")
-        .mode("overwrite")
-        .saveAsTable(BRONZE_TABLE_SALES_RAW)
-    )
+    cf_overwrite_table(spark, df, BRONZE_TABLE_SALES_RAW)  # noqa: F821
     logger.info(f"Wrote {BRONZE_TABLE_SALES_RAW}")

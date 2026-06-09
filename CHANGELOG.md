@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-09
+
+### Fixed
+- Local CLI notebook runs (`pyfabric-run-notebook` / `pyfabric-run-pipeline`)
+  now create a Delta-enabled Spark session before any cell executes. A
+  hook-less run previously fell through to the notebook's own
+  `SparkSession.builder.getOrCreate()`, yielding a session without Delta wired
+  in, so managed-table writes failed. Runs that supply `_spark` via hooks
+  (e.g. `pyfabric-test`) are unaffected.
+- `examples/minimal-medallion` now runs end-to-end locally and in CI:
+  - Consolidated the three per-layer lakehouses into a single `lakehouse` so
+    unqualified table reads/writes resolve identically locally and in Fabric.
+  - Re-export `Logger` and `pyspark.sql.functions as F` from
+    `common_functions` so generated layer notebooks (which strip those
+    imports) resolve them at runtime.
+  - Replaced `mode("overwrite").saveAsTable` with a `cf_overwrite_table`
+    helper (`DROP TABLE` + `saveAsTable`) that also works on the open-source
+    Delta build used in local dev.
+
+### Added
+- `pyfabric_dev.local_config` now exports the resolved `DEV_BASE_DIR` into
+  `os.environ` (via `setdefault`, preserving any value the parallel test
+  runner injects). This lets inlined notebook code detect local execution and
+  route lakehouse paths under `DEV_BASE_DIR` without importing the module —
+  which it can't under Fabric.
+- `examples/minimal-medallion/stage_data.py` (copies the sample CSV into the
+  local lakehouse `Files/` tree) and `requirements.txt` (Fabric Runtime 1.3
+  pins: Spark 3.5 / Delta 3.2). CI now runs the pipeline end-to-end
+  (stage → bronze → silver → gold) alongside the unit tests.
+
 ## [0.4.1] - 2026-06-09
 
 ### Changed

@@ -48,6 +48,12 @@ _default_base_dir_name = os.getenv("FABRIC_DEV_BASE_DIR_NAME", ".fabric_dev")
 DEV_BASE_DIR = Path(
     os.getenv("DEV_BASE_DIR", Path.home() / _default_base_dir_name / _worktree_hash)
 )
+# Export the resolved value so inlined notebook code (which can't import this
+# module under Fabric) can detect local execution by reading os.environ —
+# e.g. a cf_get_lakehouse_path that routes under DEV_BASE_DIR locally and
+# /lakehouse/default in Fabric. setdefault preserves any value already set
+# (e.g. the per-worker dir the parallel test runner injects).
+os.environ.setdefault("DEV_BASE_DIR", str(DEV_BASE_DIR))
 
 # Local lakehouse paths (stand in for /lakehouse/default in Fabric).
 LOCAL_LAKEHOUSE_PATH = DEV_BASE_DIR / "lakehouse" / "default"
