@@ -40,3 +40,17 @@ repo and won't be accepted here.
 If your contribution feels generic enough that *any* Fabric medallion project
 could use it, it belongs here. If it encodes business logic specific to your
 data sources or schemas, keep it in your own repo.
+
+## Releasing (maintainers)
+
+1. Bump `version` in `pyproject.toml` and add a dated section to `CHANGELOG.md`.
+2. Commit and merge to `main`.
+3. Run from a clean checkout on `main`:
+
+```bash
+./scripts/release.sh 0.5.0
+```
+
+Use `--dry-run` to print the commands without executing them. The script tags
+and pushes `v<version>`, creates a GitHub release, and the publish workflow
+ships the package to PyPI.
