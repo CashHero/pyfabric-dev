@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-06-09
+## [0.5.1] - 2026-06-09
+
+### Added
+- `scripts/release.sh` — a maintainer release helper that validates
+  preconditions (requested version matches `pyproject.toml`, clean working
+  tree, on `main`, local `main` in sync with `origin/main`, tag unused) then
+  tags and pushes `v<version>` and creates the GitHub release that triggers the
+  PyPI publish workflow. Steps are idempotent, so a run that failed partway can
+  be safely re-run; `--dry-run` previews the commands. Release process is
+  documented in CONTRIBUTING.md.
+- `CLAUDE.md` — repository guidance for Claude Code (architecture overview,
+  commands, conventions).
 
 ### Fixed
 - Local CLI notebook runs (`pyfabric-run-notebook` / `pyfabric-run-pipeline`)
