@@ -1,6 +1,6 @@
 """Bronze: read sales CSV drops and land them as a Delta table.
 
-In Fabric this notebook reads from the Files/ tree of bronze_lakehouse.
+In Fabric this notebook reads from the Files/ tree of the lakehouse.
 Locally the same path resolves under DEV_BASE_DIR's lakehouse/default/Files.
 """
 from logging import Logger
