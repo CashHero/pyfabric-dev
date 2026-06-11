@@ -849,11 +849,7 @@ def generate_test_notebook(config: NotebookConfig) -> str:
     # (since those are provided by %run common_functions and %run production_notebook)
     if config.module_path.exists():
         test_imports = extract_imports_from_module(config.module_path, skip_imports=[
-            "from src.common",
-            "import src.common",
-            "from src.silver",
-            "from src.bronze",
-            "from src.gold",
+            "from src.",
             "import src.",
             "from tests.",
         ])
@@ -1067,8 +1063,14 @@ def find_modules_with_run_function(src_dir: Path) -> list[NotebookConfig]:
 
 
 def validate_no_src_imports(notebook_name: str, content: str, warn_only: bool = False):
-    """Ensure no src.* imports leaked into generated notebook content."""
+    """Ensure no src.* imports leaked into generated notebook content.
+
+    With ``warn_only`` (test notebooks), indented src.* imports only warn —
+    they live inside test functions that are skipped in Fabric. Top-level
+    (column-0) imports always raise: they execute when the notebook runs.
+    """
     in_docstring = False
+    warned = False
     for i, line in enumerate(content.split("\n"), 1):
         stripped = line.strip()
         # Track docstrings (triple-quoted strings)
@@ -1094,9 +1096,11 @@ def validate_no_src_imports(notebook_name: str, content: str, warn_only: bool = 
                 f"  src.* imports don't work in Fabric. Use try/except (ImportError, FileNotFoundError) "
                 f"or move the functionality to common_functions."
             )
-            if warn_only:
-                print(f"  WARNING: {msg}")
-                return  # One warning per notebook is enough
+            is_top_level = not line[:1].isspace()
+            if warn_only and not is_top_level:
+                if not warned:
+                    print(f"  WARNING: {msg}")
+                    warned = True  # One warning per notebook is enough
             else:
                 raise ValueError(msg)
 
