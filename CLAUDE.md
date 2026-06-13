@@ -78,7 +78,7 @@ Runs pytest files across a `ProcessPoolExecutor`, giving each worker a distinct 
 
 ## Conventions
 
-- Pre-1.0 (`v0.5.1`); minor versions may break. No backwards-compat shims, feature flags, or speculative abstractions (per CONTRIBUTING.md).
+- Pre-1.0 (`v0.5.2`); minor versions may break. No backwards-compat shims, feature flags, or speculative abstractions (per CONTRIBUTING.md).
 - Comments only when WHY is non-obvious — don't restate WHAT.
 - Tests stay green on `main`; fix flaky tests rather than `@skip`.
 - Commits are DCO-signed (`git commit -s`).

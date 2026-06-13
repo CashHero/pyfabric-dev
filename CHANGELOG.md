@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-06-11
+
+### Fixed
+- Test-notebook generation now strips **all** `from src.*` imports instead of
+  an enumerated list of layers (`src.common`/`src.bronze`/`src.silver`/
+  `src.gold`). Imports from layers added later (e.g. `src.backup`) leaked
+  verbatim into the generated notebook and failed in Fabric with
+  `ModuleNotFoundError: No module named 'src'`.
+- `validate_no_src_imports` now **raises** on top-level (column-0) `src.*`
+  imports in test notebooks instead of only warning — those execute when the
+  notebook runs in Fabric. Indented imports (inside locally-skipped test
+  functions) still warn only.
+
 ## [0.5.1] - 2026-06-09
 
 ### Added
