@@ -23,7 +23,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-You'll need Java 11+ on `PATH` for PySpark.
+You'll need Java 17+ on `PATH` for PySpark (CI uses 21, matching Fabric Runtime 2.0).
 
 ## Style
 

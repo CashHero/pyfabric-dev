@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyfabric-dev"
-version = "0.5.2"
+version = "0.6.0"
 description = "Local development framework for Microsoft Fabric notebooks: source-of-truth Python, generated .Notebook artifacts, mocked Fabric APIs, parallel local testing."
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -25,8 +25,8 @@ classifiers = [
 ]
 
 dependencies = [
-  "pyspark>=3.5.0",
-  "delta-spark>=3.2.0",
+  "pyspark>=4.1.1",
+  "delta-spark>=4.2.0",
   "azure-identity>=1.15.0",
   "azure-keyvault-secrets>=4.7.0",
   "python-dotenv>=1.0.0",

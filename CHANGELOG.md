@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-22
+
+Targets Microsoft Fabric Runtime 2.0 (Spark 4.1 / Delta 4.2 / Java 21 / Python 3.13).
+
+### Changed
+- **Breaking:** requires `pyspark>=4.1.1` and `delta-spark>=4.2.0`, and therefore
+  Java 17+ (Fabric Runtime 2.0 runs Java 21). Projects still on Fabric Runtime 1.3
+  (Spark 3.5 / Delta 3.2) should pin `pyfabric-dev<0.6`.
+- The local Spark session mirrors Runtime 2.0's defaults where they differ from
+  upstream Spark 4.1: `spark.sql.ansi.enabled=false` (a bad cast returns null
+  instead of failing, as in Fabric) and deletion vectors enabled on new Delta
+  tables. `spark.databricks.delta.optimizeWrite.enabled` is no longer set.
+- Delta jars are resolved with `delta.configure_spark_with_delta_pip`, which picks
+  the artifact built for the installed Spark (`io.delta:delta-spark_4.1_2.13`).
+- `examples/minimal-medallion` pins Runtime 2.0 versions: pyspark 4.1.1,
+  delta-spark 4.2.0, numpy 2.x. CI runs on JDK 21.
+
 ## [0.5.2] - 2026-06-11
 
 ### Fixed

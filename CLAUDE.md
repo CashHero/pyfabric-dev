@@ -10,7 +10,7 @@ Keep the line in CONTRIBUTING.md in mind: business-logic helpers (specific data 
 
 ## Commands
 
-Requires Python 3.13/3.14 and a JDK 17+ on `$PATH` (PySpark needs the JVM).
+Requires Python 3.13/3.14 and a JDK 17+ on `$PATH` (PySpark needs the JVM; JDK 21 matches Fabric Runtime 2.0).
 
 ```bash
 pip install -e ".[dev]"        # dev install
