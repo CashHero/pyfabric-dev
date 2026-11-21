@@ -30,7 +30,7 @@ Fabric notebooks have two pain points:
 
 ## Install
 
-Requires **Python 3.13 or 3.14** and a JDK 17+ on `$PATH` (for PySpark).
+Requires **Python 3.13 or 3.14** and a JDK 17+ on `$PATH` (for PySpark; JDK 21 matches Fabric Runtime 2.0).
 
 ```bash
 pip install pyfabric-dev

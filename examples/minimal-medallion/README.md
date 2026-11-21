@@ -42,7 +42,7 @@ config/
   test_batches.json
 data/
   sales.csv
-requirements.txt                — Fabric Runtime 1.3 pins (Spark 3.5 / Delta 3.2)
+requirements.txt                — Fabric Runtime 2.0 pins (Spark 4.1 / Delta 4.2)
 stage_data.py                   — copy the sample CSV into the local lakehouse Files/
 sales_etl.DataPipeline/
   pipeline-content.json         — bronze → silver → gold DAG
@@ -59,9 +59,9 @@ common/common_functions.Notebook/
 From this directory:
 
 ```bash
-# 0. Install Fabric-matching dependencies (Spark 3.5 / Delta 3.2).
-#    Installing the bare package would pull Spark 4.x, which no Fabric
-#    runtime uses — so always install via requirements.txt.
+# 0. Install Fabric-matching dependencies (Spark 4.1 / Delta 4.2).
+#    Installing the bare package would pull the newest Spark/Delta, which
+#    no Fabric runtime uses — so always install via requirements.txt.
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 

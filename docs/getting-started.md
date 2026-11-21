@@ -27,7 +27,7 @@ pyfabric-dev==0.5.2
 Requirements:
 
 - Python **3.13** or **3.14**
-- Java 17+ (for PySpark)
+- Java 17+ (for PySpark; 21 matches Fabric Runtime 2.0)
 - PySpark and `delta-spark` are pulled in transitively
 
 ## Five-minute walkthrough

@@ -15,7 +15,6 @@ import logging
 import os
 import sys
 from logging import Logger
-from pathlib import Path
 from typing import Literal
 
 from pyspark.sql import SparkSession
@@ -157,7 +156,7 @@ def _create_local_spark_session() -> SparkSession:
     from pyfabric_dev.local_config import SPARK_MASTER, SPARK_WAREHOUSE_DIR, SPARK_METASTORE_DIR
 
     try:
-        import delta
+        import delta  # noqa: F401 — detects whether delta-spark is installed
         import importlib.metadata
         from pyspark import __version__ as spark_version
 
@@ -202,8 +201,15 @@ def _create_local_spark_session() -> SparkSession:
         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
         .config("spark.sql.sources.default", "delta")
 
+        # Fabric Runtime 2.0 defaults that differ from upstream Spark 4.1
+        # (https://learn.microsoft.com/fabric/data-engineering/runtime-2-0-migration-guide).
+        # Fabric keeps ANSI mode off, so a bad cast yields null instead of failing
+        # the job; upstream Spark 4 turns it on. New Delta tables get deletion
+        # vectors. Runtime 2.0 no longer sets delta.optimizeWrite.enabled.
+        .config("spark.sql.ansi.enabled", "false")
+        .config("spark.databricks.delta.properties.defaults.enableDeletionVectors", "true")
+
         # Delta Lake optimizations
-        .config("spark.databricks.delta.optimizeWrite.enabled", "true")
         .config("spark.sql.sources.partitionOverwriteMode", "dynamic")
 
         # Compression optimizations
@@ -220,23 +226,11 @@ def _create_local_spark_session() -> SparkSession:
         .config("spark.sql.legacy.createHiveTableByDefault", "false")
     )
 
-    # Configure Delta Lake JARs
+    # Delta Lake JARs: delta-spark's helper resolves the Maven artifact built for
+    # the installed Spark (e.g. io.delta:delta-spark_4.1_2.13:4.2.0).
     if delta_version:
-        try:
-            delta_package_path = Path(delta.__file__).parent
-            delta_jars = list(delta_package_path.glob("**/delta-*.jar"))
-
-            if delta_jars:
-                jar_paths = ",".join([str(jar.absolute()) for jar in delta_jars])
-                builder = builder.config("spark.jars", jar_paths)
-            else:
-                # Use Maven coordinates
-                spark_major_minor = ".".join(spark_version.split(".")[:2])
-                scala_version = "2.12" if spark_major_minor.startswith("3.") else "2.13"
-                delta_packages = f"io.delta:delta-spark_{scala_version}:{delta_version}"
-                builder = builder.config("spark.jars.packages", delta_packages)
-        except Exception:
-            pass
+        from delta import configure_spark_with_delta_pip
+        builder = configure_spark_with_delta_pip(builder)
 
     return builder.getOrCreate()
 
