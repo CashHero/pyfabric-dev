@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-22
+
+### Added
+- `test_notebook_pip_packages` in `config/notebook_generation.json`: pip
+  requirement specs that every generated test notebook installs in its first
+  cell when they're missing. Fabric Runtime 2.0 no longer preinstalls `pytest`,
+  so test notebooks that import it fail with `ModuleNotFoundError`. The cell
+  runs `pip` through `subprocess` rather than `%pip`, which Fabric rejects in
+  high-concurrency pipeline sessions and, unless the notebook activity passes
+  `_inlineInstallationEnabled`, in any pipeline run. Locally the venv already
+  has the packages, so the cell installs nothing.
+
 ## [0.6.0] - 2026-11-22
 
 Targets Microsoft Fabric Runtime 2.0 (Spark 4.1 / Delta 4.2 / Java 21 / Python 3.13).

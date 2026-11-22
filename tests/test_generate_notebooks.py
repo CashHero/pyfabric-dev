@@ -1,7 +1,12 @@
 """Tests for the notebook generator's src-import stripping and validation."""
 
+import ast
+import subprocess
+import sys
+
 import pytest
 
+import pyfabric_dev.cli.generate_notebooks as gen
 from pyfabric_dev.cli.generate_notebooks import (
     NotebookConfig,
     extract_imports_from_module,
@@ -141,3 +146,39 @@ def test_generate_test_notebook_strips_top_level_src_and_keeps_indented(tmp_path
     assert "from datetime import date" in content
     # Validation (as write_notebook runs it for test notebooks) must not raise.
     validate_no_src_imports("test_sales", content, warn_only=True)
+
+
+def _write_minimal_test_module(tmp_path):
+    module = tmp_path / "test_sales.py"
+    module.write_text("def run_tests(spark, logger):\n    pass\n")
+    return NotebookConfig(module_path=module, notebook_name="test_sales", layer="tests")
+
+
+def test_generate_test_notebook_has_no_pip_cell_by_default(tmp_path, monkeypatch):
+    monkeypatch.setattr(gen, "NOTEBOOK_GEN_CONFIG", {})
+    content = generate_test_notebook(_write_minimal_test_module(tmp_path))
+    assert "pip" not in content
+
+
+def test_generate_test_notebook_installs_configured_pip_packages_first(tmp_path, monkeypatch):
+    """test_notebook_pip_packages adds a cell before any other that installs the
+    missing packages. It must be plain Python, not %pip, which Fabric rejects in
+    high-concurrency pipeline sessions."""
+    monkeypatch.setattr(
+        gen, "NOTEBOOK_GEN_CONFIG", {"test_notebook_pip_packages": ["pytest==9.2.0", "freezegun"]}
+    )
+    content = generate_test_notebook(_write_minimal_test_module(tmp_path))
+    first_cell = content.split("# CELL ********************")[1].split("# METADATA")[0]
+    assert "['pytest==9.2.0', 'freezegun']" in first_cell
+    assert "%pip" not in content
+    assert "RUN_MAIN = False" in content.split("# CELL ********************")[2]
+    ast.parse(first_cell)
+
+
+def test_pip_install_cell_installs_only_missing_packages(monkeypatch):
+    calls = []
+    monkeypatch.setattr(subprocess, "check_call", lambda cmd: calls.append(cmd))
+    ns: dict = {}
+    exec(gen._pip_install_cell(["pytest==9.2.0", "surely-not-installed-pkg[extra]>=1"]), ns)
+    assert ns["_missing_pip_packages"] == ["surely-not-installed-pkg[extra]>=1"]
+    assert calls == [[sys.executable, "-m", "pip", "install", "-q", "surely-not-installed-pkg[extra]>=1"]]

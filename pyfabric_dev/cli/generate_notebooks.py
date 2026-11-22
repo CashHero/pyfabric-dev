@@ -58,6 +58,10 @@ NOTEBOOK_GEN_DEFAULTS = {
     "common_functions_extra_modules": [],
     "helper_notebooks": [],
     "notebook_run_dependencies": {},
+    # pip requirement specs that every test notebook installs first if they're
+    # missing (e.g. ["pytest==9.2.0"]), for test-only packages the Fabric
+    # runtime doesn't preinstall. See _pip_install_cell for why it isn't %pip.
+    "test_notebook_pip_packages": [],
 }
 
 
@@ -790,6 +794,30 @@ def module_imports_fabric_harness(module_path: Path) -> bool:
     return False
 
 
+def _pip_install_cell(specs: list[str]) -> str:
+    """Code for a cell that pip-installs whichever of ``specs`` aren't installed.
+
+    Not ``%pip``: Fabric rejects that magic in high-concurrency sessions, which
+    pipeline runs use when the workspace enables high concurrency for pipelines,
+    and in any pipeline run without ``_inlineInstallationEnabled``. Only the
+    distribution's presence is checked, so locally, where the venv already
+    provides the packages, the cell installs nothing.
+    """
+    return "\n".join([
+        "import importlib, importlib.metadata, re, subprocess, sys",
+        "",
+        "_missing_pip_packages = []",
+        f"for _spec in {specs!r}:",
+        "    try:",
+        "        importlib.metadata.distribution(re.split(r\"[\\s\\[<>=!~;]\", _spec, maxsplit=1)[0])",
+        "    except importlib.metadata.PackageNotFoundError:",
+        "        _missing_pip_packages.append(_spec)",
+        "if _missing_pip_packages:",
+        "    subprocess.check_call([sys.executable, \"-m\", \"pip\", \"install\", \"-q\", *_missing_pip_packages])",
+        "    importlib.invalidate_caches()",
+    ])
+
+
 def generate_test_notebook(config: NotebookConfig) -> str:
     """Generate a test notebook with inlined test code."""
     lakehouse_config = LAKEHOUSE_CONFIGS.get("tests")
@@ -799,6 +827,16 @@ def generate_test_notebook(config: NotebookConfig) -> str:
     content = ["# Fabric notebook source", ""]
     content.append(generate_metadata_block(lakehouse_config))
     content.append("")
+
+    # Cell 0 (optional): install test-only packages the runtime lacks
+    pip_packages = NOTEBOOK_GEN_CONFIG.get("test_notebook_pip_packages", [])
+    if pip_packages:
+        content.append("# CELL ********************")
+        content.append("")
+        content.append(_pip_install_cell(pip_packages))
+        content.append("")
+        content.append(generate_cell_metadata())
+        content.append("")
 
     # Cell 1: Disable RUN_MAIN for the notebook being tested
     content.append("# CELL ********************")
