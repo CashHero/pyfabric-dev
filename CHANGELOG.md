@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-23
+
+### Fixed
+- The local Spark session now matches two more Fabric Runtime 2.0 session
+  defaults, read from a live Fabric session:
+  - `spark.sql.session.timeZone=UTC`. The session used to take the machine's
+    time zone, so timestamp-to-date conversions and `current_date()` could
+    give a different day locally than in Fabric. Importing
+    `pyfabric_dev.local_env` also puts the Python process (and the JVM it
+    starts) in UTC, as Fabric's driver is, so collected timestamps and
+    `date.today()` agree with Spark.
+  - `spark.sql.sources.partitionOverwriteMode=STATIC` (was `dynamic`). An
+    overwrite of a partitioned table now replaces the whole table, as in
+    Fabric, instead of only the partitions it writes.
+
 ## [0.6.1] - 2026-11-22
 
 ### Added
