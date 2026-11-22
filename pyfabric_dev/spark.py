@@ -209,8 +209,13 @@ def _create_local_spark_session() -> SparkSession:
         .config("spark.sql.ansi.enabled", "false")
         .config("spark.databricks.delta.properties.defaults.enableDeletionVectors", "true")
 
-        # Delta Lake optimizations
-        .config("spark.sql.sources.partitionOverwriteMode", "dynamic")
+        # Fabric sessions run in UTC. Without this the session takes the
+        # machine's time zone, so timestamp-to-date conversions and
+        # current_date() can land on a different day locally.
+        .config("spark.sql.session.timeZone", "UTC")
+        # Fabric overwrites partitioned tables statically: an overwrite
+        # replaces the whole table, not only the partitions it writes.
+        .config("spark.sql.sources.partitionOverwriteMode", "STATIC")
 
         # Compression optimizations
         .config("spark.io.compression.lz4.blockSize", "128kb")

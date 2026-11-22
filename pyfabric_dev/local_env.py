@@ -8,12 +8,23 @@ Importing this module:
   succeed off-cloud.
 - Calls `ensure_dev_directories()` to create the local Spark warehouse,
   Derby metastore, and lakehouse `Files/` tree.
+- Puts the process in UTC, as Fabric's driver is. The JVM that Spark starts
+  later inherits it, so Python, Java and the Spark session agree on time.
 
-Typical use at the top of a test or local-runner script:
+Typical use at the top of a test or local-runner script, before anything
+starts Spark:
 
     import pyfabric_dev.local_env  # noqa: F401  -- side effects on import
 """
+import os
 import sys
+import time
+
+# PySpark turns collected timestamps into naive datetimes in the Python
+# process's time zone, and date.today() uses it too. With Spark in UTC and
+# Python in the machine's zone, the same instant comes back hours apart.
+os.environ["TZ"] = "UTC"
+time.tzset()
 
 import pyfabric_dev.mock_notebookutils as _mock_utils
 from pyfabric_dev.local_config import ensure_dev_directories
