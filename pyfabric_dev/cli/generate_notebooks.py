@@ -62,6 +62,8 @@ NOTEBOOK_GEN_DEFAULTS = {
     # missing (e.g. ["pytest==9.2.0"]), for test-only packages the Fabric
     # runtime doesn't preinstall. See _pip_install_cell for why it isn't %pip.
     "test_notebook_pip_packages": [],
+    # Session settings for dedicated test notebooks only; production is unchanged.
+    "test_notebook_spark_conf": {},
 }
 
 
@@ -898,6 +900,18 @@ def generate_test_notebook(config: NotebookConfig) -> str:
     content.append("")
     content.append(generate_cell_metadata())
     content.append("")
+
+    # Tiny test datasets often need different settings from production workloads.
+    spark_conf = NOTEBOOK_GEN_CONFIG.get("test_notebook_spark_conf", {})
+    if spark_conf:
+        content.append("# CELL ********************")
+        content.append("")
+        content.append("# Test-only Spark settings (config/notebook_generation.json)")
+        for key, value in spark_conf.items():
+            content.append(f"_spark.conf.set({key!r}, {value!r})")
+        content.append("")
+        content.append(generate_cell_metadata())
+        content.append("")
 
     # Cell 5: Test imports
     content.append("# CELL ********************")

@@ -160,6 +160,29 @@ def test_generate_test_notebook_has_no_pip_cell_by_default(tmp_path, monkeypatch
     assert "pip" not in content
 
 
+def test_test_spark_conf_runs_after_session_setup_before_tests(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    settings = {"spark.sql.shuffle.partitions": "2",
+                "spark.databricks.delta.optimizeWrite.enabled": "false"}
+    monkeypatch.setattr(gen, "NOTEBOOK_GEN_CONFIG", {"test_notebook_spark_conf": settings})
+    content = generate_test_notebook(_write_minimal_test_module(tmp_path))
+    cells = content.split("# CELL ********************")
+    cell = next(c.split("# METADATA")[0] for c in cells if "# Test-only Spark settings" in c)
+    spark = SimpleNamespace(conf=Mock())
+    exec(cell, {"_spark": spark})
+    assert spark.conf.set.call_args_list == [((k, v),) for k, v in settings.items()]
+    assert content.index("_spark = cf_create_spark_session()") < content.index(cell)
+    assert content.index(cell) < content.index("run_tests(_spark, _logger)")
+
+
+def test_test_spark_conf_is_opt_in(tmp_path, monkeypatch):
+    monkeypatch.setattr(gen, "NOTEBOOK_GEN_CONFIG", {})
+    content = generate_test_notebook(_write_minimal_test_module(tmp_path))
+    assert "_spark.conf.set(" not in content
+
+
 def test_generate_test_notebook_installs_configured_pip_packages_first(tmp_path, monkeypatch):
     """test_notebook_pip_packages adds a cell before any other that installs the
     missing packages. It must be plain Python, not %pip, which Fabric rejects in
