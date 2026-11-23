@@ -182,3 +182,43 @@ def test_pip_install_cell_installs_only_missing_packages(monkeypatch):
     exec(gen._pip_install_cell(["pytest==9.2.0", "surely-not-installed-pkg[extra]>=1"]), ns)
     assert ns["_missing_pip_packages"] == ["surely-not-installed-pkg[extra]>=1"]
     assert calls == [[sys.executable, "-m", "pip", "install", "-q", "surely-not-installed-pkg[extra]>=1"]]
+
+
+def test_pip_install_cell_skips_pip_when_another_notebook_installed_while_waiting(monkeypatch):
+    """Notebooks in one high-concurrency session share a Python env. The install
+    runs under an exclusive lock, and a notebook that waited for the lock checks
+    again and skips pip, since another notebook has installed the package."""
+    import fcntl
+    import importlib.metadata
+
+    installed = set()
+    real_distribution = importlib.metadata.distribution
+
+    def fake_distribution(name):
+        if name == "late-pkg" and name not in installed:
+            raise importlib.metadata.PackageNotFoundError(name)
+        return real_distribution("pytest")
+
+    locks = []
+
+    def fake_flock(fd, op):
+        locks.append(op)
+        installed.add("late-pkg")  # another notebook finished while this one waited
+
+    calls = []
+    monkeypatch.setattr(importlib.metadata, "distribution", fake_distribution)
+    monkeypatch.setattr(fcntl, "flock", fake_flock)
+    monkeypatch.setattr(subprocess, "check_call", lambda cmd: calls.append(cmd))
+    ns: dict = {}
+    exec(gen._pip_install_cell(["late-pkg==1.0"]), ns)
+    assert locks == [fcntl.LOCK_EX]
+    assert ns["_missing_pip_packages"] == []
+    assert calls == []
+
+
+def test_pip_install_cell_takes_no_lock_when_nothing_is_missing(monkeypatch):
+    import fcntl
+
+    monkeypatch.setattr(fcntl, "flock", lambda fd, op: pytest.fail("locked with nothing to install"))
+    monkeypatch.setattr(subprocess, "check_call", lambda cmd: pytest.fail("ran pip with nothing to install"))
+    exec(gen._pip_install_cell(["pytest"]), {})

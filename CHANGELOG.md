@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-23
+
+### Fixed
+- The `test_notebook_pip_packages` install cell no longer fails when several
+  test notebooks start together in one high-concurrency Fabric session. Those
+  notebooks share one Python environment, and their concurrent `pip install`
+  runs broke each other (`OSError: [Errno 2] No such file or directory:
+  .../site-packages/pluggy/__init__.py`). The install now runs under an
+  exclusive file lock, and a notebook that waited for the lock checks again
+  and skips pip when another notebook has already installed the packages.
+
 ## [0.6.2] - 2026-11-23
 
 ### Fixed
