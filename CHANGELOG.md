@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-23
+
+### Added
+- `test_notebook_spark_conf` in `config/notebook_generation.json` applies Spark
+  session settings after session initialization in generated test notebooks.
+  Defaults to an empty map; production notebook generation is unchanged. Use
+  dedicated test sessions, since settings persist for the session lifetime.
+
 ## [0.6.3] - 2026-11-23
 
 ### Fixed
