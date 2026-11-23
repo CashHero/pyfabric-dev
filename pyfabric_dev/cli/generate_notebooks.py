@@ -802,18 +802,38 @@ def _pip_install_cell(specs: list[str]) -> str:
     and in any pipeline run without ``_inlineInstallationEnabled``. Only the
     distribution's presence is checked, so locally, where the venv already
     provides the packages, the cell installs nothing.
+
+    Notebooks that share a high-concurrency session share one driver and one
+    Python environment, and start together. Concurrent ``pip install`` runs into
+    the same site-packages break each other (``OSError: [Errno 2] No such file
+    or directory: .../pluggy/__init__.py``), so the install runs under an
+    exclusive file lock, and the missing packages are checked again once the
+    lock is held: a notebook that waited finds them installed and skips pip.
+    ``fcntl`` is imported only when something is missing, so a local run on
+    Windows, where the venv has everything, never needs it.
     """
     return "\n".join([
-        "import importlib, importlib.metadata, re, subprocess, sys",
+        "import importlib, importlib.metadata, os, re, subprocess, sys, tempfile",
         "",
-        "_missing_pip_packages = []",
-        f"for _spec in {specs!r}:",
-        "    try:",
-        "        importlib.metadata.distribution(re.split(r\"[\\s\\[<>=!~;]\", _spec, maxsplit=1)[0])",
-        "    except importlib.metadata.PackageNotFoundError:",
-        "        _missing_pip_packages.append(_spec)",
+        "def _missing_pip_packages_in(specs):",
+        "    missing = []",
+        "    for spec in specs:",
+        "        try:",
+        "            importlib.metadata.distribution(re.split(r\"[\\s\\[<>=!~;]\", spec, maxsplit=1)[0])",
+        "        except importlib.metadata.PackageNotFoundError:",
+        "            missing.append(spec)",
+        "    return missing",
+        "",
+        f"_missing_pip_packages = _missing_pip_packages_in({specs!r})",
         "if _missing_pip_packages:",
-        "    subprocess.check_call([sys.executable, \"-m\", \"pip\", \"install\", \"-q\", *_missing_pip_packages])",
+        "    import fcntl",
+        "    # Notebooks in one high-concurrency session share this Python env: one pip at a time.",
+        "    with open(os.path.join(tempfile.gettempdir(), \"pyfabric-dev-pip-install.lock\"), \"w\") as _pip_lock:",
+        "        fcntl.flock(_pip_lock, fcntl.LOCK_EX)",
+        "        importlib.invalidate_caches()",
+        "        _missing_pip_packages = _missing_pip_packages_in(_missing_pip_packages)",
+        "        if _missing_pip_packages:",
+        "            subprocess.check_call([sys.executable, \"-m\", \"pip\", \"install\", \"-q\", *_missing_pip_packages])",
         "    importlib.invalidate_caches()",
     ])
 
